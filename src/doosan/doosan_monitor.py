@@ -38,7 +38,6 @@ HAND_IP = os.getenv("HAND_IP", "192.168.5.46")
 ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
 MQTT_SERVER = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
 MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")+"/"+ROBOT_UUID
-MQTT_FORMAT = os.getenv("MQTT_FORMAT", "Denso-UR-Control-IK")
 MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
 SAVE = os.getenv("SAVE", "true") == "true"
 
@@ -295,20 +294,13 @@ class UR_MON:
                 # self.reconnect_after_timeout(e)
                 actual_joint = None
             if actual_joint is not None:
-                if MQTT_FORMAT == 'UR-realtime-control-MQTT':        
-                    joints = ['j1','j2','j3','j4','j5','j6']
-                    actual_joint_js.update({
-                        k: v for k, v in zip(joints, actual_joint)})
-                elif MQTT_FORMAT == 'UR-Control-IK':
-                    # 7要素送る必要があるのでダミーの[0]を追加
-                    actual_joint_js.update({"joints": list(actual_joint) + [0]})
-                    # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
-                    # NOTE(20250530): 現状はこれでうまく行くがVR側と意思疎通が必要
-                    # actual_joint_js["joints"][4] = actual_joint_js["joints"][4] - 90
-                    # NOTE(20250604): 一時的な対応。VR側で修正され次第削除。
-                    # actual_joint_js["joints"][0] = actual_joint_js["joints"][0] + 180
-                else:
-                    raise ValueError("Unknown MQTT_FORMAT")
+                # 7要素送る必要があるのでダミーの[0]を追加
+                actual_joint_js.update({"joints": list(actual_joint) + [0]})
+                # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
+                # NOTE(20250530): 現状はこれでうまく行くがVR側と意思疎通が必要
+                # actual_joint_js["joints"][4] = actual_joint_js["joints"][4] - 90
+                # NOTE(20250604): 一時的な対応。VR側で修正され次第削除。
+                # actual_joint_js["joints"][0] = actual_joint_js["joints"][0] + 180
 
             # 型: 整数、単位: ms
             time_ms = int(now * 1000)
