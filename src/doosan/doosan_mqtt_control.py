@@ -6,11 +6,11 @@ from multiprocessing import Process
 
 import numpy as np
 
-from doosan.config import SHM_NAME, SHM_SIZE, ROBOT_NAME
-from doosan.doosan_control import UR_CON, UR_CON_Archiver
-from doosan.doosan_monitor import UR_MON
-from doosan.monitor_gui import run_joint_monitor_gui
-from doosan.mqtt_recv import MQTT_Recv
+from .config import SHM_NAME, SHM_SIZE, ROBOT_NAME
+from .doosan_control import UR_CON, UR_CON_Archiver
+from .doosan_monitor import UR_MON
+from .monitor_gui import run_joint_monitor_gui
+from .mqtt_recv import MQTT_Recv
 
 
 class ProcessManager:

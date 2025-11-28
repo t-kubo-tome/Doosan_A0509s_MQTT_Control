@@ -1,4 +1,4 @@
-from dummy_hand_control import DummyHandControl
+from .dummy_hand_control import DummyHandControl
 
 
 # ホルダーの座標系は、ベース座標系（ツール座標系ではない）であることに注意

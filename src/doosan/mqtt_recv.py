@@ -16,9 +16,7 @@ import sys
 ## ここでUUID を使いたい
 import uuid
 
-package_dir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(package_dir)
-from config import SHM_NAME, SHM_SIZE
+from .config import SHM_NAME, SHM_SIZE
 
 from dotenv import load_dotenv
 

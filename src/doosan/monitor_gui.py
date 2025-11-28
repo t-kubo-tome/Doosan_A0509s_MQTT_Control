@@ -8,7 +8,7 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 
-from config import (
+from .config import (
     ABS_JOINT_LIMIT,
     SHM_NAME,
     SHM_SIZE,

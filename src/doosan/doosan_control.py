@@ -20,17 +20,13 @@ import numpy as np
 from dotenv import load_dotenv
 
 # Robot shared modules
-from filter import SMAFilter
-from interpolate import DelayedInterpolator
-from utils import deg2rad_list, pose_mm_deg_to_m_rad, rtde_d_batch_monitor
+from .filter import SMAFilter
+from .interpolate import DelayedInterpolator
 
 # Robot specific modules
-from dashboard_client import DashboardClient
-from rtde_control import RTDEControlInterface as RTDEControl
-from rtde_io import RTDEIOInterface as RTDEIO
-
-from config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
-from doosan.doosan_tools import tool_infos, tool_classes, tool_base
+from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
+from .doosan_tools import tool_infos, tool_classes, tool_base
+from .doosan_robot import DoosanRobot
 
 
 # パラメータ
