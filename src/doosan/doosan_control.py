@@ -1,4 +1,4 @@
-# URを制御する
+# Doosanを制御する
 
 import logging
 import queue

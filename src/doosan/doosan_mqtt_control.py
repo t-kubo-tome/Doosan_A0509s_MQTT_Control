@@ -1,4 +1,4 @@
-# URをMQTTで制御する
+# DoosanをMQTTで制御する
 
 import multiprocessing
 import multiprocessing.shared_memory

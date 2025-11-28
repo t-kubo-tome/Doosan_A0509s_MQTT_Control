@@ -1,4 +1,4 @@
-# UR の状態をモニタリングする
+# Doosanの状態をモニタリングする
 
 from enum import auto, Enum
 import logging

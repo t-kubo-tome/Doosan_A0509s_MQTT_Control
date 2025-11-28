@@ -1,5 +1,5 @@
-SHM_NAME = "ur"
+SHM_NAME = "doosan"
 SHM_SIZE = 64
 ABS_JOINT_LIMIT = [360, 360, 360, 360, 360, 360]
 T_INTV = 0.002
-ROBOT_NAME = "UR"
+ROBOT_NAME = "Doosan"
