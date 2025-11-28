@@ -60,11 +60,11 @@ filter_kind: Literal[
     "none",
     "filter_target_from_target_but_diff_from_control"
 ] = "filter_target_from_target_but_diff_from_control"  # "original"
-speed_limits = np.array([240, 200, 240, 300, 300, 475])
+speed_limits = np.array([180, 180, 180, 360, 360, 360])
 speed_limit_ratio = 0.35
 # NOTE: 加速度制限。スマートTPの最大加速度設定は単位が[rev/s^2]だが、[deg/s^2]とみなして、
 # その値をここで設定すると、エラーが起きにくくなる (観測範囲でエラーがなくなった)
-accel_limits = np.array([4040, 4033.33, 4040, 5050, 5050, 4860])
+accel_limits = np.array([360, 360, 360, 720, 720, 720])
 accel_limit_ratio = 0.35
 stopped_velocity_eps = 1e-4
 servo_mode = 0x202
@@ -82,7 +82,7 @@ n_windows *= int(0.008 / t_intv)
 reset_default_state = True
 default_joints = {
     # TCPが台の中心の上に来る初期位置
-    "tidy": [0.0, -90.0, -90.0, -90.0, 90.0, 0.0],
+    "tidy": [0.0, 0.0, -90.0, 0.0, -90.0, 0.0],
     # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
     "vr": [159.3784, 10.08485, 122.90902, 151.10866, -43.20116 + 90, 20.69275],
     # NOTE: 2025/04/18 19:25の新しい位置?VRとの対応がおかしい気がする
