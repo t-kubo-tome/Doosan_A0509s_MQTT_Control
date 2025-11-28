@@ -1,4 +1,0 @@
-[submodule "src/vendor/ur_rtde"]
-	path = src/vendor/ur_rtde
-	url = https://gitlab.com/t-kubo-tome/ur_rtde.git
-	branch = feature/epick-realtime-control
