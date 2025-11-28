@@ -235,20 +235,11 @@ void OnDisConnected(const std::string & ip) {
 }
 
 Robot::Robot(const std::string & ip, const std::string & log): ip_(ip), log_(log) {
+  push_log("[Robot] start");
   if (log == "none") g_log = LogMode::None;
   else if (log == "cpp") g_log = LogMode::Cpp;
   else if (log == "queue") g_log = LogMode::Queue;
   else g_log = LogMode::None;
-}
-
-Robot::~Robot() {
-  leave_servo_mode();
-  disable();
-  stop();
-}
-
-bool Robot::start() {
-  push_log("[start] start");
   // 起動のためのコールバック
   // 現在の状態の出力と異常な状態からの復帰
   // HACK: 無名関数を関数ポインタにするにはキャプチャ式を使えないのでtrue/falseをベタ書きしている
@@ -266,9 +257,26 @@ bool Robot::start() {
   // TODO: OnDisConnectedにipを渡す方法
   // OnDisConnectedに重要な処理は書いていないので現状何もしない
   // Drfl.set_on_disconnected([ip](){OnDisConnected(true, ip);});
-  if (!Drfl.open_connection(ip_)) return false;
+}
+
+Robot::~Robot() {
+  push_log("[~Robot] start");
+  leave_servo_mode();
+  disable();
+  stop();
+}
+
+bool Robot::start() {
+  push_log("[start] start");
+  if (!Drfl.open_connection(ip_)) {
+    push_log("[start] open_connection failed");
+    return false;
+  }
   // バージョンを指定する必要あり
-  if (!Drfl.setup_monitoring_version(1)) return false;
+  if (!Drfl.setup_monitoring_version(1)) {
+    push_log("[start] setup_monitoring_version failed");
+    return false;
+  }
   is_started_ = true;
   return true;
 }
@@ -443,13 +451,13 @@ void Robot::move_pose_servo_by_vel(float x, float y, float z, float rx, float ry
   float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
   Drfl.speedl_rt(fTargetVel, fTargetAcc, fPeriod_);
 }
-void Robot::move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz) {
+bool Robot::move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz) {
   // 非同期
   // 速度制御。単位: [deg/s]
   float fTargetVel[6] = {x, y, z, rx, ry, rz};
   // -10000で自動設定になる
   float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
-  if (!Drfl.speedj_rt(fTargetVel, fTargetAcc, fPeriod_)) return;
+  return Drfl.speedj_rt(fTargetVel, fTargetAcc, fPeriod_);
 }
 bool Robot::leave_servo_mode() {
   if (is_in_servo_mode_) {

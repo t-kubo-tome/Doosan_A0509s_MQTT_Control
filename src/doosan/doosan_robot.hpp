@@ -26,7 +26,7 @@ public:
   bool enter_servo_mode(float fPeriod = 0.001);
   void move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz);
   void move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
-  void move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
+  bool move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
   bool leave_servo_mode();
   bool disable();
   bool stop();
