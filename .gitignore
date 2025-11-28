@@ -215,3 +215,6 @@ cython_debug/
 # log files
 *.jsonl
 log/
+
+!/src/vendor/API-DRFL/lib/
+!/src/vendor/API-DRFL/lib/*.a
