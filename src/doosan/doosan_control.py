@@ -30,7 +30,7 @@ from rtde_control import RTDEControlInterface as RTDEControl
 from rtde_io import RTDEIOInterface as RTDEIO
 
 from config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
-from ur.ur_tools import tool_infos, tool_classes, tool_base
+from doosan.doosan_tools import tool_infos, tool_classes, tool_base
 
 
 # パラメータ

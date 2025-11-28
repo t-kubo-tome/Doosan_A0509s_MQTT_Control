@@ -10,9 +10,9 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import Optional
 
-from ur.config import ROBOT_NAME
-from ur.ur_mqtt_control import ProcessManager
-from ur.ur_tools import tool_infos
+from doosan.config import ROBOT_NAME
+from doosan.doosan_mqtt_control import ProcessManager
+from doosan.doosan_tools import tool_infos
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
