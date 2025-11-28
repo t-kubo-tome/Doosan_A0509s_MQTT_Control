@@ -101,7 +101,7 @@ speed_tool_change = 2
 target_state_abs_joint_diff_limit = [30, 30, 40, 40, 40, 60]
 use_first_speed_limit = False
 use_second_speed_limit = False
-
+control_interface: Literal["position", "velocity"] = "velocity"
 save_control = SAVE
 
 
@@ -152,39 +152,15 @@ class UR_CON:
     def __init__(self):
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
-        self.rtde_c: RTDEControl | None = None
-        self.rtde_d: DashboardClient | None = None
-        self.rtde_io: RTDEIO | None = None
+        self.robot: DoosanRobot | None = None
 
     def init_robot(self):
         # ロボット固有の処理を含む
         try:
-            dashboard_port = 29999
-            verbose = True
-            # ダッシュボード接続
-            if self.rtde_d is None:
-                self.rtde_d = DashboardClient(ROBOT_IP, dashboard_port, verbose)
-            if not self.rtde_d.isConnected():
-                # 接続。タイムアウト時エラー
-                self.rtde_d.connect(2000)
-            # リモートコントロールモードでなければティーチペンダントから操作が必要
-            if not self.rtde_d.isInRemoteControl():
-                raise ValueError(
-                    "Please switch to Remote Control mode on the teach pendant.")
-            # ハンド制御用IOクライアントの作成
-            if self.rtde_io is None:
-                # 引数はhostname, verbose, use_upper_range_registers
-                self.rtde_io = RTDEIO(ROBOT_IP, True, False)
-            else:
-                # こう書くしか無い
-                self.rtde_io.disconnect()
-                self.rtde_io.reconnect()  
-            self.velocity = 0.4
-            self.acceleration = 0.3
-            self.dt = T_INTV
-            # Value used in several examples
-            self.lookahead_time = 0.1
-            self.gain = 300
+            if self.robot is None:
+                self.robot = DoosanRobot(ROBOT_IP, "cpp")
+            if not self.robot.start():
+                raise ValueError("Failed to start robot")
             tool_id = int(os.environ["TOOL_ID"])
             self.find_and_setup_hand(tool_id)
         except Exception as e:
@@ -355,6 +331,7 @@ class UR_CON:
             sw.start("Get shared memory")
             now = time.time()
             self.on_step_start_in_control_loop()
+            self.monitor_in_control_loop()
 
             # TODO: これがメインスレッドを遅くしている可能性ありだが
             # この1行だけでとも思う。要検証
@@ -820,8 +797,13 @@ class UR_CON:
 
             if move_robot:
                 sw.lap("Send arm command")
-                success = self.move_joint_servo(
-                    control.tolist(), lock, error_info, error_event, stop_event)
+                if control_interface == "position":
+                    success = self.move_joint_servo(
+                        control.tolist(), lock, error_info, error_event, stop_event)
+                elif control_interface == "velocity":
+                    v_control = (control - self.last_control) / (now - self.last)
+                    success = self.move_joint_servo_by_vel(
+                        v_control.tolist(), lock, error_info, error_event, stop_event)
                 if not success:
                     break
 
@@ -882,17 +864,19 @@ class UR_CON:
         error_event,
         stop_event,
     ) -> bool:
-        assert self.rtde_c is not None
+        pass
+
+    def move_joint_servo_by_vel(
+        self,
+        control: List[float],
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        assert self.robot is not None
         # ロボット固有の処理を含む
-        is_success = self.rtde_c.servoJ(
-            deg2rad_list(control),
-            self.velocity,
-            self.acceleration,
-            self.dt,
-            self.lookahead_time,
-            self.gain,
-        )
-        self.rtde_c.waitPeriod(self.t_start)
+        is_success = self.robot.move_joint_servo_by_vel(*control)
         if not is_success:
             msg = "Failed to send servoJ command"
             with lock:
@@ -904,14 +888,20 @@ class UR_CON:
         return is_success
 
     def on_step_start_in_control_loop(self) -> None:
-        assert self.rtde_c is not None
-         # ロボット固有の処理を含む
-        self.t_start = self.rtde_c.initPeriod()
+        pass
+
+    def monitor_in_control_loop(self) -> None:
+        state_pose_from_state = np.array(self.robot.get_current_pose_rt()[1:])
+        state_joint_from_state = np.array(self.robot.get_current_joint_rt()[1:])
+        # 起動時など両方0になるときがあるがそのような場合は無効なデータが入っている
+        if not (state_pose_from_state.sum() == 0 and state_joint_from_state.sum() == 0):
+            self.pose[:6] = state_joint_from_state
+            self.pose[19] = 1
+            # HACK: 本来は常にモニタすべき値
+            self.pose[37] = 1
 
     def should_wait_control_loop(self) -> bool:
-        # ロボット固有の処理を含む
-        # move_robotのときはwaitPeriodで待つので不要
-        return not move_robot
+        return True
 
     def is_ready_to_stop(self) -> bool:
         # ロボット固有の処理を含む
@@ -921,91 +911,16 @@ class UR_CON:
         return (self.control == self.last_control).all()
 
     def send_grip(self) -> None:
-        # ハンド固有の処理を含む
-        # ロボットコントローラ側の制御ループではレジスタ値に応じて以下の操作を行う
-        # - 0のとき物体を把持していればグリップ状態を保つ、していなければ何もしない
-        # - 1のときグリップ操作を行う
-        # - 2のときリリース操作を行う
-        # 物体を把持していない場合にグリップ操作をし続けてほしいのでレジスタ値は1のまま
-        self.rtde_io.setInputIntRegister(18, 1)
+        pass
 
     def send_release(self) -> None:
-        # ハンド固有の処理を含む
-        # リリース操作は一度だけ行えばよいので2にしてから0に戻す
-        self.rtde_io.setInputIntRegister(18, 2)
-        # ロボットコントローラ側の制御ループが確実に値を読み取るまで少し待つ
-        time.sleep(0.1)
-        self.rtde_io.setInputIntRegister(18, 0)
+        pass
 
     def enable(self) -> bool:
         self.logger.info("Enabling robot")
         try:
-            # 自動での制御可能状態への移行は実装する
-            # 電源ON。TPのRobot StatusがRobot Active以上なら何もしないので気軽に呼び出して良い
-            # 非同期処理。
-            self.rtde_d.powerOn()
-            # ブレーキ解除。TPのRobot StatusがRobot in Normal Mode以上なら
-            # 何もしないので気軽に呼び出して良い
-            # 非同期処理。
-            self.rtde_d.brakeRelease()
-            # 制御可能状態になるまで時間がかかるので待機
-            t_start = time.time()
-            while True:
-                robotmode = self.rtde_d.robotmode()
-                if robotmode == "Robotmode: RUNNING":
-                    break
-                time.sleep(1)
-                if time.time() - t_start > 15:
-                    raise TimeoutError(
-                        "Failed to reach ready-to-control state within 15 seconds.")
-
-            # 500Hz is default of e-Series and UR-Series
-            rtde_frequency = round(1 / self.dt)
-            # ロボットコントローラ側で実行され、PC側からのコマンドを受け付ける制御ループを
-            # 含むプログラムは、スクリプトに記述される。FLAG_UPLOAD_SCRIPTは、PC側の
-            # ur_rtdeライブラリのscripts/rtde_control.scriptを
-            # ロボットコントローラ側に加工してアップロードし実行する。
-            # このスクリプトを編集するのが最も簡単。
-            # FLAG_USE_EXT_UR_CAPは、ティーチペンダント側の操作が必要で煩雑。
-            # FLAG_CUSTOM_SCRIPTは、ur_rtde==1.6.2では、アップロード時の加工を
-            # 自分で行う必要があるので煩雑
-            flags = RTDEControl.FLAG_VERBOSE | RTDEControl.FLAG_UPLOAD_SCRIPT
-            # URCap機能用のポート (デフォルト値)
-            ur_cap_port = 50002
-            # 制御タスクの優先度。例では受信タスクより優位になっている
-            rt_control_priority = 85
-            # 制御クライアントの作成
-            # すでに存在する場合は削除して接続を切る
-            # TODO: もうすこしスマートにできるかも
-            if self.rtde_c is not None:
-                self.rtde_c.stopScript()
-                self.rtde_c.disconnect()
-                del self.rtde_c
-                import gc
-                gc.collect()
-                self.rtde_c = None
-            # 1回では上手く行かないことが多く、2回で大体上手く行く
-            for i in range(3):
-                try:
-                    # エラーを送出する可能性あり
-                    self.rtde_c = RTDEControl(
-                        ROBOT_IP,
-                        rtde_frequency,
-                        flags,
-                        ur_cap_port,
-                        rt_control_priority,
-                    )
-                except RuntimeError as e_retry:
-                    if "ur_rtde: Failed to start control script, before timeout of 5 seconds" not in str(e_retry):
-                        raise e_retry
-                    if i == 2:
-                        raise e_retry
-                    # 少し待たないと以下のエラーが出ることがある
-                    # RuntimeError: One of the RTDE input registers are already in use! Currently you must disable the EtherNet/IP adapter, PROFINET or any MODBUS unit configured on the robot. This might change in the future.
-                    time.sleep(1)
-                else:
-                    break
-            return True
+            if not self.robot.enable():
+                raise ValueError("Failed to enable robot")
         except Exception as e:
             self.logger.error("Error enabling robot")
             self.logger.error(f"{self.format_error(e)}")
@@ -1016,16 +931,7 @@ class UR_CON:
     def disable(self) -> None:
         self.logger.info("Disabling robot")
         try:
-            # 制御クライアントを削除して接続を切る
-            # TODO: もうすこしスマートにできるかも
-            if self.rtde_c is not None:
-                self.rtde_c.stopScript()
-                self.rtde_c.disconnect()
-                del self.rtde_c
-                import gc
-                gc.collect()
-                self.rtde_c = None
-            self.rtde_d.powerOff()
+            self.robot.disable()
         except Exception as e:
             self.logger.error("Error disabling robot")
             self.logger.error(f"{self.format_error(e)}")
@@ -1042,46 +948,41 @@ class UR_CON:
 
     def tidy_pose(self) -> None:
         try:
-            if self.rtde_c is None:
-                raise ValueError("Robot is not enabled")
-            is_success = self.rtde_c.moveJ(deg2rad_list(self.tidy_joint))
-            return is_success
+            self.robot.move_joint(*self.tidy_joint)
         except Exception as e:
             self.logger.error("Error moving to tidy pose")
             self.logger.error(f"{self.format_error(e)}")
 
     def move_joint(self, joints: List[float]) -> None:
         try:
-            if self.rtde_c is None:
-                raise ValueError("Robot is not enabled")
-            is_success = self.rtde_c.moveJ(deg2rad_list(joints))
-            return is_success
+            self.robot.move_joint(*joints)
         except Exception as e:
             self.logger.error("Error moving to joint pose")
             self.logger.error(f"{self.format_error(e)}")
 
     def clear_error(self) -> None:
         try:
-            self.logger.info("Clearing robot error")
-            errors = rtde_d_batch_monitor(self.rtde_d)
-            # triggerProtectiveStopの検証必要
-            self.logger.info(f"Errors in teach pendant: {errors}")
+            pass
+            # self.logger.info("Clearing robot error")
+            # errors = rtde_d_batch_monitor(self.rtde_d)
+            # # triggerProtectiveStopの検証必要
+            # self.logger.info(f"Errors in teach pendant: {errors}")
             
-            # ポップアップを閉じる複数の方法を試みる
-            # ポップアップが無い場合は何もされない
-            # closePopupとcloseSafetyPopupはしなくても次にenableは可能
-            # 一般的なポップアップを閉じる
-            self.rtde_d.closePopup()
-            # 加速度エラーなどのTPのポップアップや
-            # 緊急停止ボタンを押して戻した後のTPのポップアップを閉じる
-            self.rtde_d.closeSafetyPopup()
-            # Protective Stop時にこれを実行しないとenableできないかは不明
-            # Protective Stopのポップアップを閉じ、Protective Stopを解除する
-            self.rtde_d.unlockProtectiveStop()
+            # # ポップアップを閉じる複数の方法を試みる
+            # # ポップアップが無い場合は何もされない
+            # # closePopupとcloseSafetyPopupはしなくても次にenableは可能
+            # # 一般的なポップアップを閉じる
+            # self.rtde_d.closePopup()
+            # # 加速度エラーなどのTPのポップアップや
+            # # 緊急停止ボタンを押して戻した後のTPのポップアップを閉じる
+            # self.rtde_d.closeSafetyPopup()
+            # # Protective Stop時にこれを実行しないとenableできないかは不明
+            # # Protective Stopのポップアップを閉じ、Protective Stopを解除する
+            # self.rtde_d.unlockProtectiveStop()
             
-            safetystatus = errors["safetystatus"].split(": ")[-1]
-            if safetystatus == "FAULT":
-                self.rtde_d.restartSafety()
+            # safetystatus = errors["safetystatus"].split(": ")[-1]
+            # if safetystatus == "FAULT":
+            #     self.rtde_d.restartSafety()
         except Exception as e:
             self.logger.error("Error clearing robot error")
             self.logger.error(f"{self.format_error(e)}")        
@@ -1097,15 +998,15 @@ class UR_CON:
         # 非常停止時に永久に待つ可能性があるので、固定時間だけ待つ
         # 万が一スレーブモードになっていなくても自動復帰のループで
         # 再びスレーブモードに入る試みをするので問題ない
+        self.robot.enter_servo_mode(T_INTV)
         time.sleep(1)
 
     def leave_servo_mode(self):
-        assert self.rtde_c is not None
         # self.pose[14]は0のとき必ず通常モード。
         # self.pose[14]は1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
-        self.rtde_c.servoStop()
+        self.robot.leave_servo_mode()
         self.pose[14] = 0
 
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
@@ -1120,23 +1021,24 @@ class UR_CON:
 
     def recover_automatic_on_recoverable_error(self) -> bool:
         try:
-            errors = rtde_d_batch_monitor(self.rtde_d)
-            self.logger.error(f"Errors in teach pendant: {errors}")
-            # 1回自動復帰する
-            self.rtde_d.closePopup()
-            self.rtde_d.closeSafetyPopup()
-            self.rtde_d.unlockProtectiveStop()
-            self.rtde_d.restartSafety()
-            ret = self.enable()
-            if ret:
-                # 自動復帰可能エラー 
-                self.logger.info("Automatic recover succeeded")
-                return True
-                # 自動復帰不可能エラー
-            else:
-                self.logger.error(
-                    "Error is not automatically recoverable")
-                return False
+            return False
+            # errors = rtde_d_batch_monitor(self.rtde_d)
+            # self.logger.error(f"Errors in teach pendant: {errors}")
+            # # 1回自動復帰する
+            # self.rtde_d.closePopup()
+            # self.rtde_d.closeSafetyPopup()
+            # self.rtde_d.unlockProtectiveStop()
+            # self.rtde_d.restartSafety()
+            # ret = self.enable()
+            # if ret:
+            #     # 自動復帰可能エラー 
+            #     self.logger.info("Automatic recover succeeded")
+            #     return True
+            #     # 自動復帰不可能エラー
+            # else:
+            #     self.logger.error(
+            #         "Error is not automatically recoverable")
+            #     return False
         except Exception as e_recover:
             self.logger.error("Error during automatic recover")
             self.logger.error(f"{self.format_error(e_recover)}")
@@ -1440,7 +1342,7 @@ class UR_CON:
             joints = np.asarray(joints)
             joints[joint] += direction
             joints = joints.tolist()
-            is_success = self.rtde_c.moveJ(deg2rad_list(joints))
+            is_success = self.robot.move_joint(*joints)
             if not is_success:
                 raise ValueError("moveJ failed")
         except Exception as e:
@@ -1456,8 +1358,7 @@ class UR_CON:
             poses = np.asarray(poses)
             poses[axis] += direction
             poses = poses.tolist()
-            poses = pose_mm_deg_to_m_rad(poses)
-            is_success = self.rtde_c.moveL(poses)
+            is_success = self.robot.move_pose(*poses)
             if not is_success:
                 raise ValueError("moveL failed")
         except Exception as e:
@@ -1992,17 +1893,9 @@ class UR_CON:
             self.pose[38] = 0
 
     def del_robot(self) -> None:
-        # ロボット固有の処理を含む
-        if self.rtde_c is not None:
-            self.rtde_c.stopScript()
-            self.rtde_c.disconnect()
-            self.rtde_c = None
-        if self.rtde_d is not None:
-            self.rtde_d.disconnect()
-            self.rtde_d = None
-        if self.rtde_io is not None:
-            self.rtde_io.disconnect()
-            self.rtde_io = None
+        self.robot.leave_servo_mode()
+        self.robot.disable()
+        self.robot.stop()
 
     def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue):
         self.setup_logger(log_queue)
