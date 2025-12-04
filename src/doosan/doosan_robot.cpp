@@ -17,7 +17,6 @@ using namespace DRAFramework;
 #include <mutex>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include "doosan_robot.hpp"
 
 namespace {
   CDRFLEx Drfl;
