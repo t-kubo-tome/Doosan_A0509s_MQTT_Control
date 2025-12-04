@@ -307,9 +307,10 @@ bool Robot::enable() {
 void Robot::move_pose(float x, float y, float z, float rx, float ry, float rz) {
   push_log("[move_pose] start");
   float x1[6] = {x, y, z, rx, ry, rz};
-  // 位置、角度の速度、加速度
-  float tvel[2] = { 50, 100 };
-  float tacc[2] = { 50, 100 };
+  // xyz、rxryrzの速度、加速度を指定
+  float tvel[2] = { 50, 50 };
+  float tacc[2] = { 100, 100 };
+  // 到達時間は0で自動計算
   float ttime = 0;
   while (true) {
     if(Drfl.check_motion() == 0)
@@ -326,6 +327,7 @@ void Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) 
   // 速度、加速度
   float tvel = 10;
   float tacc = 20;
+  // 到達時間は0で自動計算
   float ttime = 0;
   while (true) {
     if(Drfl.check_motion() == 0)
@@ -339,9 +341,10 @@ void Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) 
 void Robot::move_default_pose_until_completion() {
   push_log("[move_default_pose_until_completion] start");
   float* x1 = default_pose_.data();
-  // 位置、角度の速度、加速度
-  float tvel[2] = { 10, 0 };
-  float tacc[2] = { 10, 0 };
+  // xyz、rxryrzの速度、加速度を指定
+  float tvel[2] = { 50, 50 };
+  float tacc[2] = { 100, 100 };
+  // 到達時間は0で自動計算
   float ttime = 0;
   while (true) {
     if(Drfl.check_motion() == 0)
