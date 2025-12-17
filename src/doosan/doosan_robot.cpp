@@ -15,6 +15,7 @@ using namespace DRAFramework;
 #include <vector>
 #include <queue>
 #include <mutex>
+#include <tuple>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -22,24 +23,29 @@ namespace {
   CDRFLEx Drfl;
   bool g_bHasControlAuthority = FALSE;
   bool g_TpInitailizingComplted = FALSE;
-  float fPeriod = 0.001;  // s
 
   enum class LogMode { None, Cpp, Queue };
   LogMode g_log = LogMode::None;
-  std::queue<std::string> g_log_queue;
+  // タプル: (timestamp, level, message)
+  std::queue<std::tuple<double, std::string, std::string>> g_log_queue;
   std::mutex g_log_queue_mutex;
   constexpr size_t g_log_queue_max_size = 500;
 
-  void push_log(const std::string& msg) {
+  void push_log(const std::string& msg, const std::string& level = "INFO") {
     if (g_log == LogMode::None) return;
     if (g_log == LogMode::Cpp) {
       std::cout << msg << std::endl;
       return;
     }
     if (g_log == LogMode::Queue) {
+      // Unix timestampを取得
+      auto now = std::chrono::system_clock::now();
+      auto duration = now.time_since_epoch();
+      double timestamp = std::chrono::duration<double>(duration).count();
+      
       std::lock_guard<std::mutex> lock(g_log_queue_mutex);
       if (g_log_queue.size() >= g_log_queue_max_size) g_log_queue.pop();
-      g_log_queue.push(msg);
+      g_log_queue.push(std::make_tuple(timestamp, level, msg));
     }
   }
 }
@@ -100,53 +106,54 @@ void OnMonitoringStateCB(const ROBOT_STATE eState) {
     // モーター電源は入ったままでのセーフティストップ状態
     case STATE_SAFE_STOP:
       push_log("[OnMonitoringStateCB] STATE_SAFE_STOP");
-      if (g_bHasControlAuthority) {
-        // セーフティストップを元に戻す
-        // STATE_SAFE_STOPの後に実行される
-        Drfl.SetSafeStopResetType(SAFE_STOP_RESET_TYPE_DEFAULT);
-        // 状態をセーフティストップを元に戻した状態にする
-        // STATE_SAFE_STOP -> STATE_STANDBY
-        Drfl.SetRobotControl(CONTROL_RESET_SAFET_STOP);
-        push_log("[OnMonitoringStateCB] CONTROL_RESET_SAFET_STOP");
-      }
       break;
     // モーター電源から入れ直すに必要のあるセーフティストップ状態
     case STATE_SAFE_OFF:
       push_log("[OnMonitoringStateCB] STATE_SAFE_OFF");
-      if (g_bHasControlAuthority) {
-        // モーター電源を入れ直す
-        Drfl.SetRobotControl(CONTROL_SERVO_ON);
-        push_log("[OnMonitoringStateCB] CONTROL_SERVO_ON");
-      }
       break;
     // リカバリモードに入ってからの復帰が必要なセーフティストップ状態
     // 遠隔操作する場合はリカバリモードで手動でロボットを動かす作業は難しいので
-    // セーフティストップを解除することはできない
+    // セーフティストップを解除することはできないのでプログラム上は何もしない
     case STATE_SAFE_STOP2:
       push_log("[OnMonitoringStateCB] STATE_SAFE_STOP2");
-      if (g_bHasControlAuthority) {
-        // リカバリ状態への移行
-        Drfl.SetRobotControl(CONTROL_RECOVERY_SAFE_STOP);
-        push_log("[OnMonitoringStateCB] CONTROL_RECOVERY_SAFE_STOP");
-      }
       break;
-
     // リカバリモードに入ってからの復帰が必要な
     // モーター電源から入れ直すに必要のあるセセーフティストップ状態
     // 遠隔操作する場合はリカバリモードで手動でロボットを動かす作業は難しいので
-    // セーフティストップを解除することはできない
+    // セーフティストップを解除することはできないのでプログラム上は何もしない
     case STATE_SAFE_OFF2:
       push_log("[OnMonitoringStateCB] STATE_SAFE_OFF2");
-      if (g_bHasControlAuthority) {
-        Drfl.SetRobotControl(CONTROL_RECOVERY_SAFE_OFF);
-        push_log("[OnMonitoringStateCB] CONTROL_RECOVERY_SAFE_OFF");
-      }
       break;
-    // リカバリ状態
+    // リカバリ状態。リカバリ完了せずに脱出しても意味がないのでプログラム上は何もしない
     case STATE_RECOVERY:
       push_log("[OnMonitoringStateCB] STATE_RECOVERY");
-      Drfl.SetRobotControl(CONTROL_RESET_RECOVERY);
-      push_log("[OnMonitoringStateCB] CONTROL_RESET_RECOVERY");
+      break;
+    default:
+      break;
+  }
+  return;
+}
+
+void RecoverFromRecoverableRobotState(const ROBOT_STATE eState) {
+  switch ((unsigned char)eState) {
+    // モーター電源は入ったままでのセーフティストップ状態
+    case STATE_SAFE_STOP:
+      push_log("[RecoverFromRecoverableRobotState] STATE_SAFE_STOP");
+      if (g_bHasControlAuthority) {
+        // 状態をセーフティストップを元に戻した状態にする
+        // STATE_SAFE_STOP -> STATE_STANDBY
+        Drfl.SetRobotControl(CONTROL_RESET_SAFET_STOP);
+        push_log("[RecoverFromRecoverableRobotState] CONTROL_RESET_SAFET_STOP");
+      }
+      break;
+    // モーター電源から入れ直すに必要のあるセーフティストップ状態
+    case STATE_SAFE_OFF:
+      push_log("[RecoverFromRecoverableRobotState] STATE_SAFE_OFF");
+      if (g_bHasControlAuthority) {
+        // モーター電源を入れ直す
+        Drfl.SetRobotControl(CONTROL_SERVO_ON);
+        push_log("[RecoverFromRecoverableRobotState] CONTROL_SERVO_ON");
+      }
       break;
     default:
       break;
@@ -174,7 +181,6 @@ void OnMonitroingAccessControlCB(const MONITORING_ACCESS_CONTROL eTrasnsitContro
     case MONITORING_ACCESS_CONTROL_GRANT:
       push_log("[OnMonitroingAccessControlCB] MONITORING_ACCESS_CONTROL_GRANT");
       g_bHasControlAuthority = TRUE;
-      OnMonitoringStateCB(Drfl.GetRobotState());
       break;
     // 制御権の移行を拒否されたら
     case MONITORING_ACCESS_CONTROL_DENY:
@@ -233,7 +239,7 @@ void OnDisConnected(const std::string & ip) {
   }
 }
 
-Robot::Robot(const std::string & ip, const std::string & log): ip_(ip), log_(log) {
+Robot::Robot(const std::string & ip, const std::string & log, float fPeriod): ip_(ip), log_(log), fPeriod_(fPeriod) {
   push_log("[Robot] start");
   if (log == "none") g_log = LogMode::None;
   else if (log == "cpp") g_log = LogMode::Cpp;
@@ -276,15 +282,46 @@ bool Robot::start() {
     push_log("[start] setup_monitoring_version failed");
     return false;
   }
+  // 自動サーボOFFを解除
+  if (!Drfl.set_auto_servo_off(0, 0)) {
+    push_log("[start] set_auto_servo_off failed");
+    return false;
+  }
+  // リアルタイム制御ポートに接続
+  // 特に受信のためにstart内で接続する必要がある
+  // enableしなくても有効に受信できることを確認済み
+  // 1対1接続しかできない
+  push_log("[start] connect_rt_control");
+  if (!Drfl.connect_rt_control(ip_)) return false;
+  // PCからロボットコントローラへの送信設定
+  // 送信データはトルクやDigital/Analog Input/Outputであり
+  // servo制御ではないので基本使わない
+  // fPeriod周期の入力がnLossCnt個こなければリアルタイム制御はdisconnectされる
+  // nLossCnt = -1はdisconnect判定しない
+  // push_log("[start] set_rt_control_input");
+  // if (!Drfl.set_rt_control_input("v1.0", fPeriod_, -1)) return;
+  // ロボットコントローラーからPCへの送信設定
+  // set_rt_control_outputは現在はnLossCntによるdisconnect判定はないとのこと
+  push_log("[start] set_rt_control_output");
+  // TODO: disconnect判定後の対応
+  if (!Drfl.set_rt_control_output("v1.0", fPeriod_, 4)) return false;
+  // データ送受信開始
+  push_log("[start] start_rt_control");
+  if (!Drfl.start_rt_control()) return false;
+  // 直後はデータ受信できないので少し待つ
+  std::this_thread::sleep_for(std::chrono::seconds(1));
   is_started_ = true;
   return true;
 }
 bool Robot::enable() {
   push_log("[enable] start");
-  if (!Drfl.set_robot_control(CONTROL_SERVO_ON)) return false;
+  if (!Drfl.set_robot_control(CONTROL_SERVO_ON)) {
+    push_log("[enable] set_robot_control failed");
+    return false;
+  }
   // 初期化完了して制御を受け付ける状態になっていないか、
-  // 制御権がない場合は、OnMonitoringStateCBと
-  // OnMonitroingAccessControlCBが背後で実行されるのを待機する
+  // 制御権がない場合はOnMonitroingAccessControlCBが
+  // 背後で実行されるのを待機する
   int retry = 0;
   int max_retry = 30;
   while ((Drfl.get_robot_state() != STATE_STANDBY) || !g_bHasControlAuthority) {
@@ -297,10 +334,16 @@ bool Robot::enable() {
     }
   }
   // 自動モードと手動モードを切り替える
-  assert(Drfl.set_robot_mode(ROBOT_MODE_AUTONOMOUS));
+  if (!Drfl.set_robot_mode(ROBOT_MODE_AUTONOMOUS)) {
+    push_log("[enable] set_robot_mode failed");
+    return false;
+  }
   // シミュレーションでなく実機
   // ROBOT_SYSTEM_REAL or ROBOT_SYSTEM_VIRTUAL
-  assert(Drfl.set_robot_system(ROBOT_SYSTEM_REAL));
+  if (!Drfl.set_robot_system(ROBOT_SYSTEM_REAL)) {
+    push_log("[enable] set_robot_system failed");
+    return false;
+  }
   is_enabled_ = true;
   return true;
 }
@@ -410,27 +453,20 @@ std::vector<double> Robot::get_current_pose_vel_rt() {
   }
   return ret;
 }
-bool Robot::enter_servo_mode(float fPeriod) {
-  // fPeriod range: [0.001, 1]
-  fPeriod_ = fPeriod;
-  // リアルタイム制御ポートに接続
-  // 1対1接続しかできない
-  push_log("[enter_servo_mode] connect_rt_control");
-  if (!Drfl.connect_rt_control(ip_)) return false;
-  // PCからロボットコントローラへの通信設定
-  // この入力はトルクやDigital/Analog Input/Outputであり
-  // servo制御ではない
-  // fPeriod周期の入力がnLossCnt個こなければリアルタイム制御はdisconnectされる
-  // nLossCnt = -1はdisconnect判定しない
-  // push_log("[enter_servo_mode] set_rt_control_input");
-  // if (!Drfl.set_rt_control_input("v1.0", fPeriod_, -1)) return;
-  // ロボットコントローラーからPCへの通信設定
-  // set_rt_control_outputは現在はnLossCntによるdisconnect判定はないとのこと
-  push_log("[enter_servo_mode] set_rt_control_output");
-  if (!Drfl.set_rt_control_output("v1.0", fPeriod_, 4)) return false;
-  // データ送受信開始
-  push_log("[enter_servo_mode] start_rt_control");
-  if (!Drfl.start_rt_control()) return false;
+std::vector<double> Robot::get_current_external_tcp_force_rt() {
+  LPRT_OUTPUT_DATA_LIST tData = Drfl.read_data_rt();
+  std::vector<double> ret;
+  double time_stamp = tData->time_stamp;
+  ret.emplace_back(time_stamp);
+  // estimated tcp force w.r.t. base coordinates [N, Nm]
+  float *pose =  tData->external_tcp_force;
+  for (int i = 0; i <= 5; i++) 
+  {
+    ret.emplace_back(pose[i]);
+  }
+  return ret;
+}
+bool Robot::enter_servo_mode() {
   is_in_servo_mode_ = true;
   return true;
 }
@@ -463,12 +499,6 @@ bool Robot::move_joint_servo_by_vel(float x, float y, float z, float rx, float r
 }
 bool Robot::leave_servo_mode() {
   if (is_in_servo_mode_) {
-    // データ送受信終了
-    push_log("[leave_servo_mode] stop_rt_control");
-    if (!Drfl.stop_rt_control()) return false;
-    // リアルタイム制御解除
-    push_log("[leave_servo_mode] disconnect_rt_control");
-    if (!Drfl.disconnect_rt_control()) return false;
     is_in_servo_mode_ = false;
   }
   return true;
@@ -476,20 +506,38 @@ bool Robot::leave_servo_mode() {
 bool Robot::disable() {
   // Doosanの場合はディスエーブル処理は不要
   if (is_enabled_) {
+    if (!Drfl.servo_off(STOP_TYPE_SLOW)) {
+      push_log("[disable] set_robot_control failed");
+      return false;
+    }
     is_enabled_ = false;
   }
   return true;
 }
 bool Robot::stop() {
   if (is_started_) {
+    // データ送受信終了
+    push_log("[leave_servo_mode] stop_rt_control");
+    if (!Drfl.stop_rt_control()) return false;
+    // リアルタイム制御解除
+    push_log("[leave_servo_mode] disconnect_rt_control");
+    if (!Drfl.disconnect_rt_control()) return false;
     Drfl.CloseConnection();
     is_started_ = false;
   }
   return true;
 }
+ROBOT_STATE Robot::get_robot_state() {
+  return Drfl.get_robot_state();
+}
 
-std::vector<std::string> Robot::pop_log_queue() {
-  std::vector<std::string> logs;
+void Robot::recover_from_recoverable_robot_state() {
+  ROBOT_STATE current_state = Drfl.get_robot_state();
+  RecoverFromRecoverableRobotState(current_state);
+}
+
+std::vector<std::tuple<double, std::string, std::string>> Robot::pop_log_queue() {
+  std::vector<std::tuple<double, std::string, std::string>> logs;
   std::lock_guard<std::mutex> lock(g_log_queue_mutex);
   while (!g_log_queue.empty()) {
     logs.push_back(g_log_queue.front());
@@ -503,9 +551,30 @@ namespace py = pybind11;
 PYBIND11_MODULE(doosan_robot, m)
 {
     m.doc() = "pybind11 example plugin";
+
+    py::enum_<ROBOT_STATE>(m, "ROBOT_STATE")
+        .value("STATE_INITIALIZING", STATE_INITIALIZING)
+        .value("STATE_STANDBY", STATE_STANDBY)
+        .value("STATE_MOVING", STATE_MOVING)
+        .value("STATE_SAFE_OFF", STATE_SAFE_OFF)
+        .value("STATE_TEACHING", STATE_TEACHING)
+        .value("STATE_SAFE_STOP", STATE_SAFE_STOP)
+        .value("STATE_EMERGENCY_STOP", STATE_EMERGENCY_STOP)
+        .value("STATE_HOMMING", STATE_HOMMING)
+        .value("STATE_RECOVERY", STATE_RECOVERY)
+        .value("STATE_SAFE_STOP2", STATE_SAFE_STOP2)
+        .value("STATE_SAFE_OFF2", STATE_SAFE_OFF2)
+        .value("STATE_RESERVED1", STATE_RESERVED1)
+        .value("STATE_RESERVED2", STATE_RESERVED2)
+        .value("STATE_RESERVED3", STATE_RESERVED3)
+        .value("STATE_RESERVED4", STATE_RESERVED4)
+        .value("STATE_NOT_READY", STATE_NOT_READY)
+        .value("STATE_LAST", STATE_LAST)
+        .export_values();
+    
     py::class_<Robot>(m, "DoosanRobot")
-        .def(py::init<const std::string &, const std::string &>(),
-             py::arg("ip") = "192.168.5.43", py::arg("log") = "none")
+        .def(py::init<const std::string &, const std::string &, float>(),
+             py::arg("ip") = "192.168.5.43", py::arg("log") = "none", py::arg("fPeriod") = 0.001)
         .def("start", &Robot::start)
         .def("enable", &Robot::enable)
         .def("move_pose", &Robot::move_pose)
@@ -517,6 +586,7 @@ PYBIND11_MODULE(doosan_robot, m)
         .def("get_current_pose_rt", &Robot::get_current_pose_rt)
         .def("get_current_pose_vel_rt", &Robot::get_current_pose_vel_rt)
         .def("get_current_joint_rt", &Robot::get_current_joint_rt)
+        .def("get_current_external_tcp_force_rt", &Robot::get_current_external_tcp_force_rt)
         .def("enter_servo_mode", &Robot::enter_servo_mode)
         .def("move_pose_servo_by_pos", &Robot::move_pose_servo_by_pos)
         .def("move_pose_servo_by_vel", &Robot::move_pose_servo_by_vel)
@@ -524,5 +594,7 @@ PYBIND11_MODULE(doosan_robot, m)
         .def("leave_servo_mode", &Robot::leave_servo_mode)
         .def("disable", &Robot::disable)
         .def("stop", &Robot::stop)
+        .def("get_robot_state", &Robot::get_robot_state)
+        .def("recover_from_recoverable_robot_state", &Robot::recover_from_recoverable_robot_state)
         .def("pop_log_queue", &Robot::pop_log_queue);
 }

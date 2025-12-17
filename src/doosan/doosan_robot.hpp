@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <tuple>
+#include "../vendor/API-DRFL/include/DRFC.h"
 
 
 
@@ -9,7 +11,8 @@ class Robot
 public:
   Robot(
     const std::string & ip = "192.168.5.43",
-    const std::string & log = "none"
+    const std::string & log = "none",
+    float fPeriod = 0.001
   );
   ~Robot();
   bool start();
@@ -23,16 +26,19 @@ public:
   std::vector<double> get_current_pose_rt();
   std::vector<double> get_current_joint_rt();
   std::vector<double> get_current_pose_vel_rt();
-  bool enter_servo_mode(float fPeriod = 0.001);
+  std::vector<double> get_current_external_tcp_force_rt();
+  bool enter_servo_mode();
   void move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz);
   void move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
   bool move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
   bool leave_servo_mode();
   bool disable();
   bool stop();
+  ROBOT_STATE get_robot_state();
+  void recover_from_recoverable_robot_state();
 
   // ログキュー操作
-  std::vector<std::string> pop_log_queue();
+  std::vector<std::tuple<double, std::string, std::string>> pop_log_queue();
 
 private:
   float fPeriod_ {-1};
