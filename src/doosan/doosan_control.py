@@ -25,12 +25,15 @@ from .interpolate import DelayedInterpolator
 
 # Robot specific modules
 from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
+from .doosan_monitor import MQTT_ROBOT_STATE_TOPIC
+from .doosan_robot import DoosanRobot, ROBOT_STATE
 from .doosan_tools import tool_infos, tool_classes, tool_base
-from .doosan_robot import DoosanRobot
 
 
 # パラメータ
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
+ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
+MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")+"/"+ROBOT_UUID
 SAVE = os.getenv("SAVE", "true") == "true"
 MOVE = os.getenv("MOVE", "true") == "true"
 # Simulated robot
@@ -158,14 +161,247 @@ class UR_CON:
         # ロボット固有の処理を含む
         try:
             if self.robot is None:
-                self.robot = DoosanRobot(ROBOT_IP, "cpp")
-            if not self.robot.start():
-                raise ValueError("Failed to start robot")
+                self.robot = DoosanRobot(ROBOT_IP, "queue")
+                self.init_robot_log_loop()
+                if not self.robot.start():
+                    raise ValueError("Failed to start robot")
+                self.init_monitor_loop()
             tool_id = int(os.environ["TOOL_ID"])
             self.find_and_setup_hand(tool_id)
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
             self.logger.error(f"{self.format_error(e)}")
+
+    def init_robot_log_loop(self):
+        self.robot_log_thread = threading.Thread(
+            target=self.robot_log_loop, daemon=True)
+        self.robot_log_thread.start()
+    
+    def del_robot_log(self):
+        if hasattr(self, 'robot_log_thread'):
+            if self.robot_log_thread.is_alive():
+                # ログスレッドを停止させる方法がないので、ここでは何もしない
+                # プロセス終了時にデーモンスレッドとして終了する
+                pass
+
+    def robot_log_loop(self):
+        while True:
+            log_block = self.robot.pop_log_queue()
+            if len(log_block) == 0:
+                time.sleep(0.01)
+                continue
+            for log in log_block:
+                # log is a tuple: (timestamp, level, message)
+                timestamp, level, message = log                
+                # ログレコードを手動で作成してタイムスタンプを反映
+                log_record = logging.LogRecord(
+                    name=self.robot_logger.name,
+                    level=getattr(logging, level, logging.INFO),
+                    pathname="",
+                    lineno=0,
+                    msg=message,
+                    args=(),
+                    exc_info=None
+                )
+                # タイムスタンプを設定（Unix timestamp）
+                log_record.created = timestamp
+                log_record.msecs = (timestamp - int(timestamp)) * 1000
+                # ログレコードをハンドラーに直接渡す
+                self.robot_logger.handle(log_record)
+                time.sleep(0.01)
+    
+    def init_monitor_loop(self):
+        self.monitor_thread = threading.Thread(
+            target=self.monitor_loop, daemon=True)
+        self.monitor_thread.start()
+
+    def monitor_loop(self):
+        # ロボット固有の処理を含む
+        last = 0
+        last_error_monitored = 0
+        last_enabled = None
+        last_is_in_servo_mode = None
+        last_is_emergency_stopped = None
+        last_health_check = 0
+        while True:
+            now = time.time()
+            if last == 0:
+                last = now
+            if last_error_monitored == 0:
+                last_error_monitored = now
+            if last_health_check == 0:
+                last_health_check = now
+            
+            if last_health_check + 60 < now:
+                last_health_check = now
+                self.logger.info("Health check: Robot monitor is running")
+
+            actual_joint_js = {}
+
+            # TCP姿勢
+            try:
+                actual_tcp_pose = self.robot.get_current_pose_rt()[1:]
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+                actual_tcp_pose = None
+            # 関節
+            try:
+                actual_joint = self.robot.get_current_joint_rt()[1:]
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+                actual_joint = None
+            # 起動時など両方0になるときがあるがそのような場合は無効なデータが入っている
+            if np.sum(actual_tcp_pose) == 0 and np.sum(actual_joint) == 0:
+                actual_tcp_pose = None
+                actual_joint = None
+
+            if actual_joint is not None:
+                self.pose[:6] = actual_joint
+                self.pose[19] = 1
+                actual_joint_js["joints"] = list(actual_joint) + [0]
+
+            if actual_tcp_pose is not None:
+                self.pose[42:48] = actual_tcp_pose
+                self.pose[48] = 1
+                actual_joint_js["poses"] = actual_tcp_pose
+
+            # 型: 整数、単位: ms
+            time_ms = int(now * 1000)
+            actual_joint_js["time"] = time_ms
+
+            # [X, Y, Z, RX, RY, RZ]: センサ値の力[N]とモーメント[Nm]
+            try:
+                forces = self.robot.get_current_external_tcp_force_rt()[1:]
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+                forces = None
+            if forces is not None:
+                actual_joint_js["forces"] = forces
+
+            # TODO: tool            
+
+            # 1つの関数で複数の情報をまとめて取得
+            robot_state = self.robot.get_robot_state()
+            # モーターの電源がONか
+            enabled = False
+            try:
+                enabled = robot_state in [
+                    ROBOT_STATE.STATE_STANDBY,
+                    ROBOT_STATE.STATE_MOVING,
+                    ROBOT_STATE.STATE_TEACHING,
+                    ROBOT_STATE.STATE_HOMMING,
+                ]
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+            if enabled != last_enabled:
+                if enabled:
+                    self.logger.info("Robot is enabled")
+                else:
+                    self.logger.info("Robot is disabled")
+            last_enabled = enabled
+            actual_joint_js["enabled"] = enabled
+
+            # スレーブモードかどうかを取得する
+            is_in_servo_mode = False
+            try:
+                # NOTE: Doosanではスレーブモードの状態はAPIでは不明なので制御値を使用
+                is_in_servo_mode = bool(self.pose[14])
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+            # 切り替わるときにログを出す
+            if  is_in_servo_mode != last_is_in_servo_mode:
+                if is_in_servo_mode:
+                    self.logger.info("Robot is in servo mode")
+                else:
+                    self.logger.info("Robot is not in servo mode")
+            last_is_in_servo_mode = is_in_servo_mode
+            actual_joint_js["servo_mode"] = is_in_servo_mode
+            self.pose[37] = int(is_in_servo_mode)
+
+            # 緊急停止状態かどうかを取得する
+            is_emergency_stopped = False
+            try:
+                is_emergency_stopped = \
+                    robot_state == ROBOT_STATE.STATE_EMERGENCY_STOP
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+            # 切り替わるときにログを出す
+            if is_emergency_stopped != last_is_emergency_stopped:
+                if is_emergency_stopped:
+                    self.logger.error("Emergency stop is ON")
+                else:
+                    self.logger.info("Emergency stop is OFF")
+            last_is_emergency_stopped = is_emergency_stopped
+            actual_joint_js["emergency_stopped"] = is_emergency_stopped
+            self.pose[36] = int(is_emergency_stopped)
+
+            error = {}
+            try:
+                is_normal_mode = robot_state not in [
+                    # ROBOT_STATE.STATE_SAFE_OFF,
+                    ROBOT_STATE.STATE_SAFE_STOP,
+                    ROBOT_STATE.STATE_SAFE_OFF2,
+                    ROBOT_STATE.STATE_SAFE_STOP2,
+                ]
+                if not is_normal_mode:
+                    errors = [{"error_code": 0,
+                               "error_message": "Robot state is not NORMAL"}]
+                else:
+                    errors = []
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+                errors = []
+            if len(errors) > 0:
+                error = {"errors": errors}
+            if error:
+                actual_joint_js["error"] = error
+
+            if self.pose[15] == 0:
+                actual_joint_js["mqtt_control"] = "OFF"
+            else:
+                actual_joint_js["mqtt_control"] = "ON"
+
+            actual_joint_js["topic_type"] = "robot"
+            actual_joint_js["topic"] = MQTT_ROBOT_STATE_TOPIC
+
+            if now-last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
+                with self.monitor_lock:
+                    self.monitor_dict.clear()
+                    self.monitor_dict.update(actual_joint_js)
+                # if self.client is not None:
+                #     jss = json.dumps(actual_joint_js)
+                #     self.client.publish(MQTT_ROBOT_STATE_TOPIC, jss)
+                last = now
+
+            # TODO
+            # MQTT手動制御モード時のみ記録する
+            # それ以外の時のエラーはstate情報は必要ないと考えたため
+            # if f is not None and self.pose[15] == 1:
+            #     datum = dict(
+            #         time=now,
+            #         kind="state",
+            #         joint=actual_joint,
+            #         pose=actual_tcp_pose,
+            #         # width=width,
+            #         # force=force,
+            #         # forces=forces,
+            #         error=error,
+            #         enabled=enabled,
+            #         # TypeError: Object of type float32 is not JSON
+            #         # serializableへの対応
+            #         # tool_id=float(tool_id),
+            #         # other=info,
+            #     )
+            #     js = json.dumps(datum, ensure_ascii=False)
+            #     f.write(js + "\n")
+            # if self.pose[32] == 1:
+            #     return LoopResult.INTERRUPTED
+
+            # 適度に間隔を開ける
+            t_elapsed = time.time() - now
+            t_wait = T_INTV - t_elapsed
+            if t_wait > 0:
+                time.sleep(t_wait)
 
     def get_hand_state(self):        
         # ハンドの状態値を取得して共有メモリに格納する
@@ -331,7 +567,6 @@ class UR_CON:
             sw.start("Get shared memory")
             now = time.time()
             self.on_step_start_in_control_loop()
-            self.monitor_in_control_loop()
 
             # TODO: これがメインスレッドを遅くしている可能性ありだが
             # この1行だけでとも思う。要検証
@@ -890,16 +1125,6 @@ class UR_CON:
     def on_step_start_in_control_loop(self) -> None:
         pass
 
-    def monitor_in_control_loop(self) -> None:
-        state_pose_from_state = np.array(self.robot.get_current_pose_rt()[1:])
-        state_joint_from_state = np.array(self.robot.get_current_joint_rt()[1:])
-        # 起動時など両方0になるときがあるがそのような場合は無効なデータが入っている
-        if not (state_pose_from_state.sum() == 0 and state_joint_from_state.sum() == 0):
-            self.pose[:6] = state_joint_from_state
-            self.pose[19] = 1
-            # HACK: 本来は常にモニタすべき値
-            self.pose[37] = 1
-
     def should_wait_control_loop(self) -> bool:
         return True
 
@@ -998,7 +1223,7 @@ class UR_CON:
         # 非常停止時に永久に待つ可能性があるので、固定時間だけ待つ
         # 万が一スレーブモードになっていなくても自動復帰のループで
         # 再びスレーブモードに入る試みをするので問題ない
-        self.robot.enter_servo_mode(T_INTV)
+        self.robot.enter_servo_mode()
         time.sleep(1)
 
     def leave_servo_mode(self):
@@ -1021,24 +1246,17 @@ class UR_CON:
 
     def recover_automatic_on_recoverable_error(self) -> bool:
         try:
-            return False
-            # errors = rtde_d_batch_monitor(self.rtde_d)
-            # self.logger.error(f"Errors in teach pendant: {errors}")
-            # # 1回自動復帰する
-            # self.rtde_d.closePopup()
-            # self.rtde_d.closeSafetyPopup()
-            # self.rtde_d.unlockProtectiveStop()
-            # self.rtde_d.restartSafety()
-            # ret = self.enable()
-            # if ret:
-            #     # 自動復帰可能エラー 
-            #     self.logger.info("Automatic recover succeeded")
-            #     return True
-            #     # 自動復帰不可能エラー
-            # else:
-            #     self.logger.error(
-            #         "Error is not automatically recoverable")
-            #     return False
+            self.robot.recover_from_recoverable_robot_state()
+            ret = self.enable()
+            if ret:
+                # 自動復帰可能エラー 
+                self.logger.info("Automatic recover succeeded")
+                return True
+            else:
+                # 自動復帰不可能エラー
+                self.logger.error(
+                    "Error is not automatically recoverable")
+                return False
         except Exception as e_recover:
             self.logger.error("Error during automatic recover")
             self.logger.error(f"{self.format_error(e_recover)}")
@@ -1343,8 +1561,8 @@ class UR_CON:
             joints[joint] += direction
             joints = joints.tolist()
             is_success = self.robot.move_joint(*joints)
-            if not is_success:
-                raise ValueError("moveJ failed")
+            # if not is_success:
+            #     raise ValueError("moveJ failed")
         except Exception as e:
             self.logger.error("Error during joint jog")
             self.logger.error(f"{self.format_error(e)}")
@@ -1359,8 +1577,8 @@ class UR_CON:
             poses[axis] += direction
             poses = poses.tolist()
             is_success = self.robot.move_pose(*poses)
-            if not is_success:
-                raise ValueError("moveL failed")
+            # if not is_success:
+            #     raise ValueError("moveL failed")
         except Exception as e:
             self.logger.error("Error during TCP jog")
             self.logger.error(f"{self.format_error(e)}")
@@ -1532,7 +1750,7 @@ class UR_CON:
         else:
             self.robot_handler = logging.StreamHandler()
         self.robot_logger.addHandler(self.robot_handler)
-        self.robot_logger.setLevel(logging.WARNING)
+        self.robot_logger.setLevel(logging.INFO)
 
     def get_logging_dir_and_change_log_file(self) -> None:
         command = self.control_pipe.recv()
@@ -1897,7 +2115,7 @@ class UR_CON:
         self.robot.disable()
         self.robot.stop()
 
-    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue):
+    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue, monitor_dict, monitor_lock):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
@@ -1906,6 +2124,8 @@ class UR_CON:
         self.control_pipe = control_pipe
         self.logging_dir = logging_dir
         self.control_to_archiver_queue = control_to_archiver_queue
+        self.monitor_dict = monitor_dict
+        self.monitor_lock = monitor_lock
 
         self.init_robot()
         self.init_realtime()
@@ -1959,6 +2179,7 @@ class UR_CON:
                 self.del_robot()
                 self.sm.close()
                 self.control_to_archiver_queue.close()
+                self.del_robot_log()
                 time.sleep(1)
                 self.logger.info("Process stopped")
                 self.handler.close()

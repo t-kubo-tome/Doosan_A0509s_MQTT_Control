@@ -104,7 +104,14 @@ class ProcessManager:
         self.ctrl = UR_CON()
         self.ctrlP = Process(
             target=self.ctrl.run_proc,
-            args=(self.control_pipe, self.slave_mode_lock, self.log_queue, logging_dir, self.control_to_archiver_queue),
+            args=(self.control_pipe,
+                  self.slave_mode_lock,
+                  self.log_queue,
+                  logging_dir,
+                  self.control_to_archiver_queue,
+                  self.monitor_dict,
+                  self.monitor_lock,
+                ),
             name=f"{ROBOT_NAME}-control")
         self.ctrlP.start()
 
