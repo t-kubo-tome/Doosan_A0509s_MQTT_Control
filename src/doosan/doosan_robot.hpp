@@ -17,9 +17,9 @@ public:
   ~Robot();
   bool start();
   bool enable();
-  void move_pose(float x, float y, float z, float rx, float ry, float rz);
-  void move_joint(float x, float y, float z, float rx, float ry, float rz);
-  void move_default_pose_until_completion();
+  bool move_pose(float x, float y, float z, float rx, float ry, float rz);
+  bool move_joint(float x, float y, float z, float rx, float ry, float rz);
+  bool move_default_pose_until_completion();
   std::vector<double> get_current_pose();
   std::vector<double> get_current_joint();
   std::vector<float> get_default_pose();
@@ -27,11 +27,9 @@ public:
   std::vector<double> get_current_joint_rt();
   std::vector<double> get_current_pose_vel_rt();
   std::vector<double> get_current_external_tcp_force_rt();
-  bool enter_servo_mode();
-  void move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz);
-  void move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
-  bool move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
-  bool leave_servo_mode();
+  bool move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz);
+  bool move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
+  bool move_joint_servo_by_vel(float j1, float j2, float j3, float j4, float j5, float j6);
   bool disable();
   bool stop();
   ROBOT_STATE get_robot_state();

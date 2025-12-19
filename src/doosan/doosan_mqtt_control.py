@@ -73,6 +73,7 @@ class ProcessManager:
         self.control_to_archiver_queue = multiprocessing.Queue()
         self.main_to_control_archiver_pipe, self.control_archiver_pipe = \
             multiprocessing.Pipe()
+        self.monitor_queue = multiprocessing.Queue()
 
     def startRecvMQTT(self):
         self.recv = MQTT_Recv()
@@ -94,6 +95,7 @@ class ProcessManager:
                   self.slave_mode_lock,
                   self.log_queue,
                   self.monitor_pipe,
+                  self.monitor_queue,
                   logging_dir,
                   disable_mqtt),
             name=f"{ROBOT_NAME}-monitor")
@@ -109,8 +111,7 @@ class ProcessManager:
                   self.log_queue,
                   logging_dir,
                   self.control_to_archiver_queue,
-                  self.monitor_dict,
-                  self.monitor_lock,
+                  self.monitor_queue,
                 ),
             name=f"{ROBOT_NAME}-control")
         self.ctrlP.start()

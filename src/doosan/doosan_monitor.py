@@ -111,7 +111,51 @@ class UR_MON:
                 if tool_info["id"] == tool_id][0]
 
     def monitor_start(self, f: TextIO | None = None) -> LoopResult:
-        pass
+        # ロボット固有の処理を含む
+        last = 0
+        while True:
+            # ログファイル変更時
+            if self.pose[34] == 1:
+                return LoopResult.LOG_FILE_CHANGED
+
+            actual_joint_js = self.monitor_queue.get()
+            now = actual_joint_js["time"]
+            if last == 0:
+                last = now
+
+            if now-last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
+                if self.client is not None:
+                    jss = json.dumps(actual_joint_js)
+                    self.client.publish(MQTT_ROBOT_STATE_TOPIC, jss)
+                    actual_joint_js["topic_type"] = "robot"
+                    actual_joint_js["topic"] = MQTT_ROBOT_STATE_TOPIC
+                with self.monitor_lock:
+                    self.monitor_dict.clear()
+                    self.monitor_dict.update(actual_joint_js)
+                last = now
+
+            # MQTT手動制御モード時のみ記録する
+            # それ以外の時のエラーはstate情報は必要ないと考えたため
+            if f is not None and self.pose[15] == 1:
+                datum = dict(
+                    time=now,
+                    kind="state",
+                    joint=actual_joint_js.get("joints"),
+                    pose=actual_joint_js.get("poses"),
+                    # width=width,
+                    # force=force,
+                    forces=actual_joint_js.get("forces"),
+                    error=actual_joint_js.get("error", {}),
+                    enabled=actual_joint_js["enabled"],
+                    # TypeError: Object of type float32 is not JSON
+                    # serializableへの対応
+                    # tool_id=float(tool_id),
+                    # other=info,
+                )
+                js = json.dumps(datum, ensure_ascii=False)
+                f.write(js + "\n")
+            if self.pose[32] == 1:
+                return LoopResult.INTERRUPTED
 
     def setup_logger(self, log_queue):
         self.logger = logging.getLogger("MON")
@@ -136,7 +180,7 @@ class UR_MON:
         self.logging_dir = logging_dir
         self.pose[34] = 0
 
-    def run_proc(self, monitor_dict, monitor_lock, slave_mode_lock, log_queue, monitor_pipe, logging_dir, disable_mqtt: bool = False):
+    def run_proc(self, monitor_dict, monitor_lock, slave_mode_lock, log_queue, monitor_pipe, monitor_queue, logging_dir, disable_mqtt: bool = False):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
@@ -145,6 +189,7 @@ class UR_MON:
         self.monitor_lock = monitor_lock
         self.slave_mode_lock = slave_mode_lock
         self.monitor_pipe = monitor_pipe
+        self.monitor_queue = monitor_queue
         self.logging_dir = logging_dir
 
         self.init_realtime()
@@ -166,6 +211,7 @@ class UR_MON:
                     if self.client is not None:
                         self.client.loop_stop()
                         self.client.disconnect()
+                    self.monitor_queue.close()
                     self.sm.close()
                     time.sleep(1)
                     self.logger.info("Process stopped")

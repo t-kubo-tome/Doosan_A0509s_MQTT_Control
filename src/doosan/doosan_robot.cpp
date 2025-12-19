@@ -266,7 +266,6 @@ Robot::Robot(const std::string & ip, const std::string & log, float fPeriod): ip
 
 Robot::~Robot() {
   push_log("[~Robot] start");
-  leave_servo_mode();
   disable();
   stop();
 }
@@ -347,7 +346,7 @@ bool Robot::enable() {
   is_enabled_ = true;
   return true;
 }
-void Robot::move_pose(float x, float y, float z, float rx, float ry, float rz) {
+bool Robot::move_pose(float x, float y, float z, float rx, float ry, float rz) {
   push_log("[move_pose] start");
   float x1[6] = {x, y, z, rx, ry, rz};
   // xyz、rxryrzの速度、加速度を指定
@@ -355,16 +354,12 @@ void Robot::move_pose(float x, float y, float z, float rx, float ry, float rz) {
   float tacc[2] = { 100, 100 };
   // 到達時間は0で自動計算
   float ttime = 0;
-  while (true) {
-    if(Drfl.check_motion() == 0)
-    {
-      Drfl.movel(x1, tvel, tacc, ttime);
-      break;
-    }
-  }
+  // 移動が完了するまでブロックする
+  bool ret = Drfl.movel(x1, tvel, tacc, ttime);
   push_log("[move_pose] end");
+  return ret;
 }
-void Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) {
+bool Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) {
   push_log("[move_joint] start");
   float x1[6] = {x, y, z, rx, ry, rz};
   // 速度、加速度
@@ -372,16 +367,12 @@ void Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) 
   float tacc = 20;
   // 到達時間は0で自動計算
   float ttime = 0;
-  while (true) {
-    if(Drfl.check_motion() == 0)
-    {
-      Drfl.movej(x1, tvel, tacc, ttime);
-      break;
-    }
-  }
+  // 移動が完了するまでブロックする
+  bool ret = Drfl.movej(x1, tvel, tacc, ttime);
   push_log("[move_joint] end");
+  return ret;
 }
-void Robot::move_default_pose_until_completion() {
+bool Robot::move_default_pose_until_completion() {
   push_log("[move_default_pose_until_completion] start");
   float* x1 = default_pose_.data();
   // xyz、rxryrzの速度、加速度を指定
@@ -389,14 +380,16 @@ void Robot::move_default_pose_until_completion() {
   float tacc[2] = { 100, 100 };
   // 到達時間は0で自動計算
   float ttime = 0;
+  bool ret = false;
   while (true) {
     if(Drfl.check_motion() == 0)
     {
-      Drfl.movel(x1, tvel, tacc, ttime);
+      ret = Drfl.movel(x1, tvel, tacc, ttime);
       break;
     }
   }
   push_log("[move_default_pose_until_completion] end");
+  return ret;
 }
 std::vector<float> Robot::get_default_pose() {
   return default_pose_;
@@ -466,11 +459,7 @@ std::vector<double> Robot::get_current_external_tcp_force_rt() {
   }
   return ret;
 }
-bool Robot::enter_servo_mode() {
-  is_in_servo_mode_ = true;
-  return true;
-}
-void Robot::move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz)
+bool Robot::move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz)
 {
   // ドキュメントによれば、位置制御は未完成
   // 20 [ms]以上の間隔であれば問題ないとのことだが、
@@ -479,31 +468,25 @@ void Robot::move_pose_servo_by_pos(float x, float y, float z, float rx, float ry
   // -10000で自動設定になる
   float fTargetVel[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
   float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
-  float fTargetTime = fPeriod_;
-  Drfl.servol_rt(fTargetPos, fTargetVel, fTargetAcc, fTargetTime);
+  return Drfl.servol_rt(fTargetPos, fTargetVel, fTargetAcc, fPeriod_);
 }
-void Robot::move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz) {
+bool Robot::move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz) {
   // 速度制御。単位: [mm/s, deg/s]
   float fTargetVel[6] = {x, y, z, rx, ry, rz};
   // -10000で自動設定になる
   float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
-  Drfl.speedl_rt(fTargetVel, fTargetAcc, fPeriod_);
+  return Drfl.speedl_rt(fTargetVel, fTargetAcc, fPeriod_);
 }
-bool Robot::move_joint_servo_by_vel(float x, float y, float z, float rx, float ry, float rz) {
+bool Robot::move_joint_servo_by_vel(float j1, float j2, float j3, float j4, float j5, float j6) {
   // 非同期
   // 速度制御。単位: [deg/s]
-  float fTargetVel[6] = {x, y, z, rx, ry, rz};
+  float fTargetVel[6] = {j1, j2, j3, j4, j5, j6};
   // -10000で自動設定になる
   float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
   return Drfl.speedj_rt(fTargetVel, fTargetAcc, fPeriod_);
 }
-bool Robot::leave_servo_mode() {
-  if (is_in_servo_mode_) {
-    is_in_servo_mode_ = false;
-  }
-  return true;
-}
 bool Robot::disable() {
+  push_log("[disable] start");
   // Doosanの場合はディスエーブル処理は不要
   if (is_enabled_) {
     if (!Drfl.servo_off(STOP_TYPE_SLOW)) {
@@ -512,9 +495,11 @@ bool Robot::disable() {
     }
     is_enabled_ = false;
   }
+  push_log("[disable] end");
   return true;
 }
 bool Robot::stop() {
+  push_log("[stop] start");
   if (is_started_) {
     // データ送受信終了
     push_log("[leave_servo_mode] stop_rt_control");
@@ -525,6 +510,7 @@ bool Robot::stop() {
     Drfl.CloseConnection();
     is_started_ = false;
   }
+  push_log("[stop] end");
   return true;
 }
 ROBOT_STATE Robot::get_robot_state() {
@@ -587,11 +573,9 @@ PYBIND11_MODULE(doosan_robot, m)
         .def("get_current_pose_vel_rt", &Robot::get_current_pose_vel_rt)
         .def("get_current_joint_rt", &Robot::get_current_joint_rt)
         .def("get_current_external_tcp_force_rt", &Robot::get_current_external_tcp_force_rt)
-        .def("enter_servo_mode", &Robot::enter_servo_mode)
         .def("move_pose_servo_by_pos", &Robot::move_pose_servo_by_pos)
         .def("move_pose_servo_by_vel", &Robot::move_pose_servo_by_vel)
         .def("move_joint_servo_by_vel", &Robot::move_joint_servo_by_vel)
-        .def("leave_servo_mode", &Robot::leave_servo_mode)
         .def("disable", &Robot::disable)
         .def("stop", &Robot::stop)
         .def("get_robot_state", &Robot::get_robot_state)

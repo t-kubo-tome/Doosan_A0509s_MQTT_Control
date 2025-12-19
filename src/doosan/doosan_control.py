@@ -32,8 +32,6 @@ from .doosan_tools import tool_infos, tool_classes, tool_base
 
 # パラメータ
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
-ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
-MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")+"/"+ROBOT_UUID
 SAVE = os.getenv("SAVE", "true") == "true"
 MOVE = os.getenv("MOVE", "true") == "true"
 # Simulated robot
@@ -174,15 +172,12 @@ class UR_CON:
 
     def init_robot_log_loop(self):
         self.robot_log_thread = threading.Thread(
-            target=self.robot_log_loop, daemon=True)
+            target=self.robot_log_loop)
         self.robot_log_thread.start()
-    
+
     def del_robot_log(self):
         if hasattr(self, 'robot_log_thread'):
-            if self.robot_log_thread.is_alive():
-                # ログスレッドを停止させる方法がないので、ここでは何もしない
-                # プロセス終了時にデーモンスレッドとして終了する
-                pass
+            self.robot_log_thread.join()
 
     def robot_log_loop(self):
         while True:
@@ -209,11 +204,17 @@ class UR_CON:
                 # ログレコードをハンドラーに直接渡す
                 self.robot_logger.handle(log_record)
                 time.sleep(0.01)
+            if self.pose[32] == 1:
+                break
     
     def init_monitor_loop(self):
         self.monitor_thread = threading.Thread(
-            target=self.monitor_loop, daemon=True)
+            target=self.monitor_loop)
         self.monitor_thread.start()
+    
+    def del_monitor_loop(self):
+        if hasattr(self, 'monitor_thread'):
+            self.monitor_thread.join()
 
     def monitor_loop(self):
         # ロボット固有の処理を含む
@@ -265,9 +266,7 @@ class UR_CON:
                 self.pose[48] = 1
                 actual_joint_js["poses"] = actual_tcp_pose
 
-            # 型: 整数、単位: ms
-            time_ms = int(now * 1000)
-            actual_joint_js["time"] = time_ms
+            actual_joint_js["time"] = now
 
             # [X, Y, Z, RX, RY, RZ]: センサ値の力[N]とモーメント[Nm]
             try:
@@ -361,41 +360,10 @@ class UR_CON:
             else:
                 actual_joint_js["mqtt_control"] = "ON"
 
-            actual_joint_js["topic_type"] = "robot"
-            actual_joint_js["topic"] = MQTT_ROBOT_STATE_TOPIC
+            self.monitor_queue.put(actual_joint_js)
 
-            if now-last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
-                with self.monitor_lock:
-                    self.monitor_dict.clear()
-                    self.monitor_dict.update(actual_joint_js)
-                # if self.client is not None:
-                #     jss = json.dumps(actual_joint_js)
-                #     self.client.publish(MQTT_ROBOT_STATE_TOPIC, jss)
-                last = now
-
-            # TODO
-            # MQTT手動制御モード時のみ記録する
-            # それ以外の時のエラーはstate情報は必要ないと考えたため
-            # if f is not None and self.pose[15] == 1:
-            #     datum = dict(
-            #         time=now,
-            #         kind="state",
-            #         joint=actual_joint,
-            #         pose=actual_tcp_pose,
-            #         # width=width,
-            #         # force=force,
-            #         # forces=forces,
-            #         error=error,
-            #         enabled=enabled,
-            #         # TypeError: Object of type float32 is not JSON
-            #         # serializableへの対応
-            #         # tool_id=float(tool_id),
-            #         # other=info,
-            #     )
-            #     js = json.dumps(datum, ensure_ascii=False)
-            #     f.write(js + "\n")
-            # if self.pose[32] == 1:
-            #     return LoopResult.INTERRUPTED
+            if self.pose[32] == 1:
+                break
 
             # 適度に間隔を開ける
             t_elapsed = time.time() - now
@@ -1099,7 +1067,7 @@ class UR_CON:
         error_event,
         stop_event,
     ) -> bool:
-        pass
+        return False
 
     def move_joint_servo_by_vel(
         self,
@@ -1173,41 +1141,25 @@ class UR_CON:
 
     def tidy_pose(self) -> None:
         try:
-            self.robot.move_joint(*self.tidy_joint)
+            ret = self.robot.move_joint(*self.tidy_joint)
+            if not ret:
+                raise ValueError("Failed to move to tidy pose")
         except Exception as e:
             self.logger.error("Error moving to tidy pose")
             self.logger.error(f"{self.format_error(e)}")
 
     def move_joint(self, joints: List[float]) -> None:
         try:
-            self.robot.move_joint(*joints)
+            ret = self.robot.move_joint(*joints)
+            if not ret:
+                raise ValueError("Failed to move to joint pose")
         except Exception as e:
             self.logger.error("Error moving to joint pose")
             self.logger.error(f"{self.format_error(e)}")
 
     def clear_error(self) -> None:
         try:
-            pass
-            # self.logger.info("Clearing robot error")
-            # errors = rtde_d_batch_monitor(self.rtde_d)
-            # # triggerProtectiveStopの検証必要
-            # self.logger.info(f"Errors in teach pendant: {errors}")
-            
-            # # ポップアップを閉じる複数の方法を試みる
-            # # ポップアップが無い場合は何もされない
-            # # closePopupとcloseSafetyPopupはしなくても次にenableは可能
-            # # 一般的なポップアップを閉じる
-            # self.rtde_d.closePopup()
-            # # 加速度エラーなどのTPのポップアップや
-            # # 緊急停止ボタンを押して戻した後のTPのポップアップを閉じる
-            # self.rtde_d.closeSafetyPopup()
-            # # Protective Stop時にこれを実行しないとenableできないかは不明
-            # # Protective Stopのポップアップを閉じ、Protective Stopを解除する
-            # self.rtde_d.unlockProtectiveStop()
-            
-            # safetystatus = errors["safetystatus"].split(": ")[-1]
-            # if safetystatus == "FAULT":
-            #     self.rtde_d.restartSafety()
+            self.logger.info("Clearing robot error")
         except Exception as e:
             self.logger.error("Error clearing robot error")
             self.logger.error(f"{self.format_error(e)}")        
@@ -1219,19 +1171,12 @@ class UR_CON:
         # 順番固定
         with self.slave_mode_lock:
             self.pose[14] = 1
-        # スレーブモードになるまでis_in_servo_modeを使って待つと
-        # 非常停止時に永久に待つ可能性があるので、固定時間だけ待つ
-        # 万が一スレーブモードになっていなくても自動復帰のループで
-        # 再びスレーブモードに入る試みをするので問題ない
-        self.robot.enter_servo_mode()
-        time.sleep(1)
 
     def leave_servo_mode(self):
         # self.pose[14]は0のとき必ず通常モード。
         # self.pose[14]は1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
-        self.robot.leave_servo_mode()
         self.pose[14] = 0
 
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
@@ -2111,11 +2056,10 @@ class UR_CON:
             self.pose[38] = 0
 
     def del_robot(self) -> None:
-        self.robot.leave_servo_mode()
         self.robot.disable()
         self.robot.stop()
 
-    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue, monitor_dict, monitor_lock):
+    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue, monitor_queue):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
@@ -2124,8 +2068,7 @@ class UR_CON:
         self.control_pipe = control_pipe
         self.logging_dir = logging_dir
         self.control_to_archiver_queue = control_to_archiver_queue
-        self.monitor_dict = monitor_dict
-        self.monitor_lock = monitor_lock
+        self.monitor_queue = monitor_queue
 
         self.init_robot()
         self.init_realtime()
@@ -2177,9 +2120,11 @@ class UR_CON:
                     control_pipe.send({"status": status})
             if self.pose[32] == 1:
                 self.del_robot()
+                self.del_robot_log()
+                self.del_monitor_loop()
                 self.sm.close()
                 self.control_to_archiver_queue.close()
-                self.del_robot_log()
+                self.monitor_queue.close()
                 time.sleep(1)
                 self.logger.info("Process stopped")
                 self.handler.close()
