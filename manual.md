@@ -1,6 +1,6 @@
-# UR_MQTT_Control マニュアル
+# Doosan_A0509s_MQTT_Control マニュアル
 
-MetaworkMQTTプロトコルでの、UR-5eの実機側の制御プログラムの使い方を説明する。
+MetaworkMQTTプロトコルでの、Doosan A0509sの実機側の制御プログラムの使い方を説明する。
 
 制御プログラムの開発環境での実行を前提とする。
 
@@ -8,24 +8,28 @@ MetaworkMQTTプロトコルでの、UR-5eの実機側の制御プログラムの
 
 **1 ロボットの起動**
 
-- ティーチペンダント（TP、正式名称とバージョンはPolyscope 5.17.0）上の電源ボタンを押して起動
-- TP画面上側のタブのLocal / RemoteをLocalにする（TPから操作する用）
-- タブのOpen... -> Installation -> epick_w_extension_20251023.installationを選択 -> Openで、事前の設定値を読み込む（ツールのTCP、Payloadを設定している）
-- タブのLocal / RemoteをRemoteにする（遠隔PCから操作する用）
+- コントローラの底面右のスイッチ（電源ケーブルの近くにある）を倒してコントローラの電源をオンにする
+- ティーチペンダントの左上にある電源ボタンを長押ししてロボット、コントローラ、ティーチペンダントの電源をオンにする
 - 緊急停止ボタンがOFFである（上に引いてある）ことを確認する。また、ロボット制御時に、緊急停止したい場合は緊急停止ボタンをONにする（押す）ことを確認しておく
 
 **2 PCでのプログラム実行**
 
 - **NOTE: VRシステムと結合しての動作確認は未検証である**
-- ロボット接続用PCとロボットコントローラはLAN接続する。LANのPC側は10.5.5.101/24、ロボットコントローラ側は10.5.5.102/24（TPで設定可能）に設定する。開発環境では設定済みである
-- 開発環境では、プログラムは`/home/uclab/UR_remote_codes/UR_MQTT_Control`にインストールされている（`pyenv local`を使用）。インストールの方法は[インストール](#インストール)参照
-- 開発環境では、ロボット制御コードは以下のコマンドで実行できる
+- ロボット接続用PCとロボットコントローラはLAN接続する。LANのPC側は192.168.5.1/24、ロボットコントローラ側は192.168.5.43/24（TPで設定可能）に設定する
+- プログラムのインストールの方法は、[インストール](#インストール)参照
+- インストール後には、ロボット制御コードは以下のコマンドで実行できる
+
+まず仮想環境を有効にする。
 
 ```sh
-sudo $(pyenv which python) src/main.py
+source .venv/bin/activate
 ```
 
-`sudo $(pyenv which python)`とするのは、リアルタイムスケジューラを利用するための設定である。この手法では、一時的にバイナリ（`python`）にリアルタイムスケジューラを利用するための権限を付与することができ、また仮想環境の`python`を用いる場合でも使用することができる。`pyenv`で`sudo`を使わずにリアルタイムスケジューラを設定する方法は未検証。
+その状態でロボット制御コードを実行する。
+
+```sh
+python src/main.py
+```
 
 以下のようなGUI画面が起動する。
 
@@ -53,30 +57,21 @@ VRシステムと結合しての動作確認が未検証なので、以下のス
 開発環境では以下のコマンドで実行できる。
 
 ```sh
-sudo $(pyenv which python) src/check_replay_from_target.py --target-path experiments/dummy_control.jsonl --log-dir experiments/log_dummy_control --use-joint-monitor-plot
+python src/check_replay_from_target.py --target-path experiments/dummy_control.jsonl --log-dir experiments/log_dummy_control --use-joint-monitor-plot
 ```
 
 `experiments/dummy_control.jsonl`は、関節J1, J6それぞれの時系列が振幅30度、周期5sのほぼ正弦波を4回繰り返す軌跡で、その途中にグリップの吸引/開放を3回行う入力情報が定義されている。結果は`experiments/log_dummy_control/<YY-mm-dd>/<HH-MM-SS>`に格納される。`--use-joint-monitor-plot`で目標値、制御値、状態値のリアルタイム表示ができる。
 
 **4 ロボットの終了**
 
-- TPの右上のアイコン -> Shutdown Robotで終了できる
+- TPの画面右下の電源ボタンから電源をオフにする
+- コントローラの底面右のスイッチ（電源ケーブルの近くにある）を倒してコントローラの電源をオフにする
 
 ## インストール
 
-開発環境では、プログラムは`/home/uclab/UR_remote_codes/UR_MQTT_Control`にインストール済みだが、ここではプログラムをインストールする方法を説明する。
+Doosan A0509sの制御には、API-DRFLを使用する。最新のレポジトリは、https://github.com/DoosanRobotics/API-DRFL にある。本システムでは、バージョン1.29を使用している。ドキュメントはhttps://manual.doosanrobotics.com/en/api/1.29/Publish/ にある。`src/vendor`には、必要なヘッダーファイルとライブラリファイル（Ubuntu 22.04用）を格納している。
 
-まず、プログラムのレポジトリからクローンする:
-
-```sh
-git clone -b develop --recurse-submodules https://github.com/t-kubo-tome/UR_MQTT_Control.git
-```
-
-レポジトリのパス、ブランチは変更される可能性あり。
-
-URの制御には、外部モジュール`ur_rtde`のレポジトリ（`https://gitlab.com/sdurobotics/ur_rtde`）を一部改変したレポジトリ（`https://gitlab.com/t-kubo-tome/ur_rtde`）のブランチ（`feature/epick-realtime-control`）を使用している。これをサブモジュールとして登録しているので、オプション`--recurse-submodules`を使用している。
-
-次に、Pythonの仮想環境を作成し、起動しておく。
+まず、Pythonの仮想環境を作成し、起動しておく。
 
 次に、必要なライブラリをインストールする:
 
@@ -84,13 +79,10 @@ URの制御には、外部モジュール`ur_rtde`のレポジトリ（`https://
 pip install -r src/requirements.txt
 ```
 
-次に、`ur_rtde`をビルド、インストールする:
+次に、`API-DRFL`およびそのPythonラッバーをビルド、インストールする:
 
 ```sh
-cd src/vendor/ur_rtde
-pip install .
-# 元の場所に戻る
-cd ../../..
+./build.sh
 ```
 
-環境変数は、`src/ur/.env.example`の変数を適宜書き換え、`src/ur/.env`に変更することで有効になる。
+環境変数は、`src/doosan/.env.example`の変数を適宜書き換え、`src/doosan/.env`に変更することで有効になる。

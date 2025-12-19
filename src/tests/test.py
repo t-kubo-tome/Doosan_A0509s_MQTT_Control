@@ -30,21 +30,24 @@ if __name__ == "__main__":
     robot.disable()=True
     robot.stop()=True
     """
+    log_mode = "queue"  # "none", "cpp", "queue"
+    robot = DoosanRobot("192.168.5.43", log_mode)
+    # Python側でログを受け取る
+    if log_mode == "queue":
+        import threading
 
-    robot = DoosanRobot("192.168.5.43", "cpp")
-    # import threading
+        def print_log_queue():
+            while True:
+                log_block = robot.pop_log_queue()
+                for log in log_block:
+                    print(log)
 
-    # def print_log_queue():
-    #     while True:
-    #         log_block = robot.pop_log_queue()
-    #         for log in log_block:
-    #             print(log)
-
-    # log_thread = threading.Thread(target=print_log_queue, daemon=True)
-    # log_thread.start()
+        log_thread = threading.Thread(target=print_log_queue, daemon=True)
+        log_thread.start()
 
     print(f"{robot.start()=}")
     print(f"{robot.enable()=}")
+    print(f"{robot.get_robot_state()=}")
     print(f"{robot.get_default_pose()=}")
     print(f"{robot.get_current_pose()=}")
     print(f"{robot.get_current_joint()=}")
