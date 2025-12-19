@@ -941,7 +941,7 @@ if __name__ == '__main__':
     # ファイルの情報が正確かいまのところ保証できないので、指定してもらう
     import argparse
     parser = argparse.ArgumentParser()
-    # NOTE: URでは現状1つのツールに対応
+    # NOTE: Doosanでは現状1つのツールに対応
     # parser.add_argument(
     #     "--tool-id",
     #     type=int,

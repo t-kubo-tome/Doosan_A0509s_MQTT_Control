@@ -149,7 +149,7 @@ class StopWatch:
         return s
 
 
-class UR_CON:
+class Doosan_CON:
     def __init__(self):
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
@@ -434,7 +434,6 @@ class UR_CON:
 
     def format_error(self, e: Exception) -> str:
         # ロボット固有の処理を含む
-        # URはロボット固有のエラーを創出しない
         s = "\n"
         s = s + "Error trace: " + traceback.format_exc() + "\n"
         return s
@@ -1131,13 +1130,6 @@ class UR_CON:
 
     def set_area_enabled(self, enable: bool) -> None:
         pass
-        # TODO: URで同等の機能が必要であれば実装する
-        # try:
-        #     self.robot.SetAreaEnabled(0, enable=enable)
-        #     self.pose[31] = int(enable)
-        # except Exception as e:
-        #     self.logger.error("Error setting area enabled")
-        #     self.logger.error(f"{self.format_error(e)}")
 
     def tidy_pose(self) -> None:
         try:
@@ -2132,7 +2124,7 @@ class UR_CON:
                 break
 
 
-class UR_CON_Archiver:
+class Doosan_CON_Archiver:
     def monitor_start(self, f: TextIO | None = None):
         while True:
             # ログファイル変更時

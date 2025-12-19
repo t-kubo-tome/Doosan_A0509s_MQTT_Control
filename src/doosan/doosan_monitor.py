@@ -43,7 +43,7 @@ class LoopResult(Enum):
     LOG_FILE_CHANGED = auto()
 
 
-class UR_MON:
+class Doosan_MON:
     def __init__(self):
         pass
 
@@ -227,7 +227,7 @@ class UR_MON:
 
 
 if __name__ == '__main__':
-    cp = UR_MON()
+    cp = Doosan_MON()
     cp.init_realtime()
     cp.init_robot()
     cp.connect_mqtt()

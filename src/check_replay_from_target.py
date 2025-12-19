@@ -174,7 +174,7 @@ class MQTTTargetReplayer:
                 break
         if ret:
             self._replay()
-        # URでは毎回disableしなくてもいい
+        # Doosanでは毎回disableしなくてもいい
         # self.pm.disable()
         self.pm.stop_all_processes()
         # TODO: Hanging here
