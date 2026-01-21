@@ -17,6 +17,7 @@ import sys
 import uuid
 
 from .config import SHM_NAME, SHM_SIZE
+from .utils import rad2deg_list
 
 from dotenv import load_dotenv
 
@@ -82,13 +83,12 @@ class MQTT_Recv:
         if msg.topic == self.mqtt_ctrl_topic:
             js = json.loads(msg.payload)
 
-            joints=['j1','j2','j3','j4','j5','j6']
-            rot =[js[x]  for x in joints]    
-            joint_q = [x for x in rot]
-            self.pose[6:12] = joint_q 
+            if "joints" in js:
+                self.pose[6:12] = rad2deg_list(js["joints"])
 
             if "grip" in js:
-                if js['grip']:
+                right_grip = js['grip'][1]
+                if right_grip:
                     self.pose[13] = 1
                 else:
                     self.pose[13] = 2

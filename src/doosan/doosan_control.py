@@ -28,6 +28,7 @@ from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
 from .doosan_monitor import MQTT_ROBOT_STATE_TOPIC
 from .doosan_robot import DoosanRobot, ROBOT_STATE
 from .doosan_tools import tool_infos, tool_classes, tool_base
+from .utils import deg2rad_list
 
 
 # パラメータ
@@ -216,6 +217,9 @@ class Doosan_CON:
         if hasattr(self, 'monitor_thread'):
             self.monitor_thread.join()
 
+    def real_to_vr_joint(self, joints: List[float]) -> List[float]:
+        return deg2rad_list(joints)
+
     def monitor_loop(self):
         # ロボット固有の処理を含む
         last = 0
@@ -259,7 +263,7 @@ class Doosan_CON:
             if actual_joint is not None:
                 self.pose[:6] = actual_joint
                 self.pose[19] = 1
-                actual_joint_js["joints"] = list(actual_joint) + [0]
+                actual_joint_js["joints"] = self.real_to_vr_joint(actual_joint)
 
             if actual_tcp_pose is not None:
                 self.pose[42:48] = actual_tcp_pose
