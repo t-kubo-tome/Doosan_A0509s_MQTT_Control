@@ -218,3 +218,5 @@ log/
 
 !/src/vendor/API-DRFL/lib/
 !/src/vendor/API-DRFL/lib/*.a
+!/src/vendor/qbsofthand_industry_api_1.0.3/libs/
+!/src/vendor/qbsofthand_industry_api_1.0.3/libs/*.so
