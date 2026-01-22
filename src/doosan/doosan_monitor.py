@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from .config import SHM_NAME, SHM_SIZE, T_INTV
 from .doosan_tools import tool_infos, tool_classes
+from .utils import rad2deg_list
 # Robot specific modules
 
 
@@ -137,10 +138,13 @@ class Doosan_MON:
             # MQTT手動制御モード時のみ記録する
             # それ以外の時のエラーはstate情報は必要ないと考えたため
             if f is not None and self.pose[15] == 1:
+                joints = actual_joint_js.get("joints")
+                if joints is not None:
+                    joints = rad2deg_list(joints)
                 datum = dict(
                     time=now,
                     kind="state",
-                    joint=actual_joint_js.get("joints"),
+                    joint=joints,
                     pose=actual_joint_js.get("poses"),
                     # width=width,
                     # force=force,

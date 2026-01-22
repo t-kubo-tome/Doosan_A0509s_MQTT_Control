@@ -477,6 +477,15 @@ bool Robot::move_pose_servo_by_vel(float x, float y, float z, float rx, float ry
   float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
   return Drfl.speedl_rt(fTargetVel, fTargetAcc, fPeriod_);
 }
+bool Robot::move_joint_servo_by_pos(float j1, float j2, float j3, float j4, float j5, float j6) {
+  // 非同期
+  // 位置制御。単位: [deg]
+  float fTargetPos[6] = {j1, j2, j3, j4, j5, j6};
+  // -10000で自動設定になる
+  float fTargetVel[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
+  float fTargetAcc[6] = {-10000, -10000, -10000, -10000, -10000, -10000};
+  return Drfl.servoj_rt(fTargetPos, fTargetVel, fTargetAcc, fPeriod_);
+}
 bool Robot::move_joint_servo_by_vel(float j1, float j2, float j3, float j4, float j5, float j6) {
   // 非同期
   // 速度制御。単位: [deg/s]
@@ -575,6 +584,7 @@ PYBIND11_MODULE(doosan_robot, m)
         .def("get_current_external_tcp_force_rt", &Robot::get_current_external_tcp_force_rt)
         .def("move_pose_servo_by_pos", &Robot::move_pose_servo_by_pos)
         .def("move_pose_servo_by_vel", &Robot::move_pose_servo_by_vel)
+        .def("move_joint_servo_by_pos", &Robot::move_joint_servo_by_pos)
         .def("move_joint_servo_by_vel", &Robot::move_joint_servo_by_vel)
         .def("disable", &Robot::disable)
         .def("stop", &Robot::stop)

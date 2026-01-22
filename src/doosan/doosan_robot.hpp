@@ -29,6 +29,7 @@ public:
   std::vector<double> get_current_external_tcp_force_rt();
   bool move_pose_servo_by_pos(float x, float y, float z, float rx, float ry, float rz);
   bool move_pose_servo_by_vel(float x, float y, float z, float rx, float ry, float rz);
+  bool move_joint_servo_by_pos(float j1, float j2, float j3, float j4, float j5, float j6);
   bool move_joint_servo_by_vel(float j1, float j2, float j3, float j4, float j5, float j6);
   bool disable();
   bool stop();

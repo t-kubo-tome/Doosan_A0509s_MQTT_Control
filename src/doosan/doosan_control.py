@@ -25,9 +25,9 @@ from .interpolate import DelayedInterpolator
 
 # Robot specific modules
 from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
-from .doosan_monitor import MQTT_ROBOT_STATE_TOPIC
 from .doosan_robot import DoosanRobot, ROBOT_STATE
 from .doosan_tools import tool_infos, tool_classes, tool_base
+from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
 from .utils import deg2rad_list
 
 
@@ -40,6 +40,7 @@ MOVE = os.getenv("MOVE", "true") == "true"
 # Real robot
 # robot_ip = "10.5.5.102"
 ROBOT_IP = os.getenv("ROBOT_IP", "10.5.5.102")
+HAND_IP = os.getenv("HAND_IP", "192.168.5.44")
 
 # 基本的に運用時には固定するパラメータ
 # 実際にロボットを制御するかしないか (VRとの結合時のデバッグ用)
@@ -76,7 +77,7 @@ if servo_mode == 0x102:
     t_intv = 0.004
 else:
     t_intv = T_INTV
-n_windows *= int(0.008 / t_intv)
+# n_windows *= int(0.008 / t_intv)
 reset_default_state = True
 default_joints = {
     # TCPが台の中心の上に来る初期位置
@@ -101,8 +102,8 @@ speed_tool_change = 2
 # 目標値が状態値よりこの制限より大きく乖離した場合はロボットを停止させる
 # 設定値は典型的なVRコントローラの動きから決定した
 target_state_abs_joint_diff_limit = [30, 30, 40, 40, 40, 60]
-use_first_speed_limit = False
-use_second_speed_limit = False
+use_first_speed_limit = True
+use_second_speed_limit = True
 control_interface: Literal["position", "velocity"] = "velocity"
 save_control = SAVE
 
@@ -155,6 +156,7 @@ class Doosan_CON:
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
         self.robot: DoosanRobot | None = None
+        self.qb_hand: qbSoftHandIndustryAPI | None = None
 
     def init_robot(self):
         # ロボット固有の処理を含む
@@ -379,15 +381,9 @@ class Doosan_CON:
         # ハンドの状態値を取得して共有メモリに格納する
         width = None
         force = None
-        # NOTE: グリッパー。幅はVR表示に必要かもしれない。
-        # 力は把持の有無に変換してもよいかもしれない。
-        if self.hand_name == "onrobot_2fg7":
-            width = self.hand.get_ext_width()
-            force = self.hand.get_force()
-        # NOTE: 真空グリッパー。真空度しか取得できないのでどう使うか不明。
-        elif self.hand_name == "onrobot_vgc10":
-            width = 0
-            force = 0
+        if self.qb_hand is not None:
+            width = self.qb_hand.getPosition()
+            force = self.qb_hand.getCurrent()
         if width is None:
             width = 0
         else:
@@ -401,6 +397,7 @@ class Doosan_CON:
         self.pose[40] = force
 
     def find_and_setup_hand(self, tool_id):
+        # ダミー処理
         connected = False
         tool_info = self.get_tool_info(tool_infos, tool_id)
         name = tool_info["name"]
@@ -420,6 +417,11 @@ class Doosan_CON:
         #     self.robot.SetToolDef(
         #         tool_info["id_in_robot"], tool_info["tool_def"])
         # self.robot.set_tool(tool_info["id_in_robot"])
+        # 本処理
+        max_timeout = 10  # seconds
+        self.qb_hand = qbSoftHandIndustryAPI(HAND_IP, max_timeout)
+        if not self.qb_hand.isInitialized():
+            raise ValueError("Failed to initialize qbSoftHandIndustryAPI")
 
     def init_realtime(self):
         os_used = sys.platform
@@ -982,6 +984,11 @@ class Doosan_CON:
                 ),
                 dict(
                     time=now,
+                    kind="target_filtered",
+                    joint=target_filtered.tolist(),
+                ),
+                dict(
+                    time=now,
                     kind="control",
                     joint=control.tolist(),
                     max_ratio=max_ratio,
@@ -1070,7 +1077,18 @@ class Doosan_CON:
         error_event,
         stop_event,
     ) -> bool:
-        return False
+        assert self.robot is not None
+        # ロボット固有の処理を含む
+        is_success = self.robot.move_joint_servo_by_pos(*control)
+        if not is_success:
+            msg = "Failed to send servoJ command"
+            with lock:
+                error_info['kind'] = "robot"
+                error_info['msg'] = msg
+                error_info['exception'] = ValueError(msg)
+            error_event.set()
+            stop_event.set()
+        return is_success
 
     def move_joint_servo_by_vel(
         self,
@@ -1107,10 +1125,14 @@ class Doosan_CON:
         return (self.control == self.last_control).all()
 
     def send_grip(self) -> None:
-        pass
+        # fully close the hand at half speed and minimum applied force (62.5% of max force is the minimum value that can be set)
+        if self.qb_hand is not None:
+            self.qb_hand.setClosure(100, 50, 62.5)
 
     def send_release(self) -> None:
-        pass
+        # reopen at full speed and full force
+        if self.qb_hand is not None:
+            self.qb_hand.setClosure(0, 100, 100)
 
     def enable(self) -> bool:
         self.logger.info("Enabling robot")
