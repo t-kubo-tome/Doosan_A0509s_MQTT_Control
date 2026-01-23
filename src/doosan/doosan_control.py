@@ -60,11 +60,9 @@ filter_kind: Literal[
     "filter_target_from_target_but_diff_from_control"
 ] = "filter_target_from_target_but_diff_from_control"  # "original"
 speed_limits = np.array([180, 180, 180, 360, 360, 360])
-speed_limit_ratio = 0.35
-# NOTE: 加速度制限。スマートTPの最大加速度設定は単位が[rev/s^2]だが、[deg/s^2]とみなして、
-# その値をここで設定すると、エラーが起きにくくなる (観測範囲でエラーがなくなった)
-accel_limits = np.array([360, 360, 360, 720, 720, 720])
-accel_limit_ratio = 0.35
+speed_limit_ratio = 0.5
+accel_limits = speed_limits ** 2
+accel_limit_ratio = 0.5
 stopped_velocity_eps = 1e-4
 servo_mode = 0x202
 use_interp = True
@@ -746,6 +744,8 @@ class Doosan_CON:
                 target_delayed = di.read(now, target)
             else:
                 target_delayed = target
+            
+            target_delayed_raw = target_delayed
 
             sw.lap("1st speed limit")
             # 速度制限をフィルタの手前にも入れてみる
@@ -980,6 +980,11 @@ class Doosan_CON:
                 dict(
                     time=now,
                     kind="target_delayed",
+                    joint=target_delayed_raw.tolist(),
+                ),
+                dict(
+                    time=now,
+                    kind="first_speed_limited_target_delayed",
                     joint=target_delayed.tolist(),
                 ),
                 dict(
