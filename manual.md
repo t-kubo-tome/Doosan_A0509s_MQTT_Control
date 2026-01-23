@@ -59,9 +59,9 @@ MQTTでの制御中に、エラーが起きた場合は、1度自動復帰を試
 
 ## インストール
 
-Doosan A0509sの制御には、API-DRFLを使用する。最新のレポジトリは、https://github.com/DoosanRobotics/API-DRFL にある。本システムでは、バージョン1.29を使用している。ドキュメントはhttps://manual.doosanrobotics.com/en/api/1.29/Publish/ にある。`src/vendor`には、必要なヘッダーファイルとライブラリファイル（Ubuntu 22.04用）を格納している。
+Doosan A0509sの制御には、API-DRFLを使用する。`src/vendor`には、必要なヘッダーファイルとライブラリファイル（Ubuntu 22.04用）を格納している。元の最新のレポジトリ（基本的にダウンロード不要）は、https://github.com/DoosanRobotics/API-DRFL にある。本システムでは、バージョン1.29を使用している。ドキュメントはhttps://manual.doosanrobotics.com/en/api/1.29/Publish/ にある。
 
-ハンド（qb SoftHand Industry）の制御には、qb SoftHand Industry APIを使用する。ライブラリファイルおよびソースコードは、https://qbrobotics.com/wp-content/uploads/2021/07/qbsofthand_industry_api_1.0.3.zip を使用している（ユーザーマニュアル https://qbrobotics.com/wp-content/uploads/2023/01/qb-SoftHand-Industry-User-Manual-ENG-DOOSAN.pdf を参照）。`src/vendor`には、必要なヘッダーファイルとライブラリファイル（x64 Linux用の共有ライブラリのみ）を格納している。
+ハンド（qb SoftHand Industry）の制御には、qb SoftHand Industry APIを使用する。`src/vendor`には、必要なヘッダーファイルとライブラリファイル（x64 Linux用の共有ライブラリのみ）を格納している。元のライブラリファイルおよびソースコード（基本的にダウンロード不要）は、https://qbrobotics.com/wp-content/uploads/2021/07/qbsofthand_industry_api_1.0.3.zip を使用している（ユーザーマニュアル https://qbrobotics.com/wp-content/uploads/2023/01/qb-SoftHand-Industry-User-Manual-ENG-DOOSAN.pdf を参照）。
 
 まず、Pythonの仮想環境を作成し、起動しておく。
 
