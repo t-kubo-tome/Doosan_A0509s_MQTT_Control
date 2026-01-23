@@ -8,11 +8,12 @@ import time
 import tkinter as tk
 import multiprocessing
 from tkinter import scrolledtext
-from typing import Optional
+from typing import List, Optional
 
 from doosan.config import ROBOT_NAME
 from doosan.doosan_mqtt_control import ProcessManager
 from doosan.doosan_tools import tool_infos
+from doosan.utils import rad2deg_list
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
@@ -217,17 +218,18 @@ class MQTTWin:
         self.button["ClearError"] = tk.Button(self.root, text="ClearError", padx=5,
                       command=self.ClearError, state="disabled")
         self.button["ClearError"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
+        self.button["ClearError"].grid_remove()
 
         self.frame_error = tk.Frame(self.root)
         self.frame_error.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
         self.canvas_error = \
             tk.Canvas(self.frame_error, width=10, height=10)
-        self.canvas_error.pack(side="left",padx=10)
+        # self.canvas_error.pack(side="left",padx=10)
         self.light_error = \
             self.canvas_error.create_oval(1, 1, 9, 9, fill="gray")
         self.label_error = \
             tk.Label(self.frame_error, text="Error")
-        self.label_error.pack(side="left",padx=2)
+        # self.label_error.pack(side="left",padx=2)
 
         row += 1
 
@@ -311,12 +313,12 @@ class MQTTWin:
         self.frame_area_enabled.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
         self.canvas_area_enabled = \
             tk.Canvas(self.frame_area_enabled, width=10, height=10)
-        self.canvas_area_enabled.pack(side="left",padx=10)
+        # self.canvas_area_enabled.pack(side="left",padx=10)
         self.light_area_enabled = \
             self.canvas_area_enabled.create_oval(1, 1, 9, 9, fill="gray")
         self.label_area_enabled = \
             tk.Label(self.frame_area_enabled, text="AreaEnabled")
-        self.label_area_enabled.pack(side="left",padx=2)
+        # self.label_area_enabled.pack(side="left",padx=2)
 
         tk.Label(self.root, text="Joint Jog").grid(row=row, column=0, padx=2, pady=2, sticky="w")
         joint_names = ["J1", "J2", "J3", "J4", "J5", "J6"]
@@ -818,6 +820,9 @@ class MQTTWin:
             self.last_state_mqtt_control = state_mqtt_control
         self.root.after(1000, self.update_button_states_from_mqtt_control)
 
+    def vr_to_real_joint(self, joints: List[float]) -> List[float]:
+        return rad2deg_list(joints)
+
     def update_monitor(self):
         # モニタープロセスからの情報
         log = self.pm.get_current_monitor_log()
@@ -844,6 +849,7 @@ class MQTTWin:
             self.canvas_error.itemconfig(self.light_error, fill=color)
             joints = log.get("joints")
             if joints is not None:
+                joints = self.vr_to_real_joint(joints)
                 for i in range(6):
                     self.string_var_states[f"J{i + 1}"].set(f"{joints[i]:.2f}")
             else:
@@ -869,6 +875,7 @@ class MQTTWin:
 
             joints = log.get("joints")
             if joints is not None:
+                joints = self.vr_to_real_joint(joints)
                 for i in range(6):
                     self.string_var_targets[f"J{i + 1}"].set(f"{joints[i]:.2f}")
             else:

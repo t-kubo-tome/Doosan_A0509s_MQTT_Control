@@ -203,7 +203,8 @@ class Doosan_CON:
                 log_record.created = timestamp
                 log_record.msecs = (timestamp - int(timestamp)) * 1000
                 # ログレコードをハンドラーに直接渡す
-                self.robot_logger.handle(log_record)
+                if self.robot_logger.isEnabledFor(log_record.levelno):
+                    self.robot_logger.handle(log_record)
                 time.sleep(0.01)
             if self.pose[32] == 1:
                 break
@@ -1529,8 +1530,8 @@ class Doosan_CON:
             joints[joint] += direction
             joints = joints.tolist()
             is_success = self.robot.move_joint(*joints)
-            # if not is_success:
-            #     raise ValueError("moveJ failed")
+            if not is_success:
+                raise ValueError("move_joint failed")
         except Exception as e:
             self.logger.error("Error during joint jog")
             self.logger.error(f"{self.format_error(e)}")
@@ -1545,8 +1546,8 @@ class Doosan_CON:
             poses[axis] += direction
             poses = poses.tolist()
             is_success = self.robot.move_pose(*poses)
-            # if not is_success:
-            #     raise ValueError("moveL failed")
+            if not is_success:
+                raise ValueError("move_pose failed")
         except Exception as e:
             self.logger.error("Error during TCP jog")
             self.logger.error(f"{self.format_error(e)}")

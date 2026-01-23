@@ -95,10 +95,12 @@ void OnMonitoringStateCB(const ROBOT_STATE eState) {
       break;
     // 正常に起動した場合、充分待つとこの状態になる
     case STATE_STANDBY:
-      push_log("[OnMonitoringStateCB] STATE_STANDBY");
+      // 重要ではないのでDEBUGレベルでログ出力
+      push_log("[OnMonitoringStateCB] STATE_STANDBY", "DEBUG");
       break;
-    case STATE_MOVING:
-      push_log("[OnMonitoringStateCB] STATE_MOVING");
+    case STATE_MOVING:     
+      // 重要ではないのでDEBUGレベルでログ出力
+      push_log("[OnMonitoringStateCB] STATE_MOVING", "DEBUG");
       break;
     case STATE_TEACHING:
       push_log("[OnMonitoringStateCB] STATE_TEACHING");
@@ -347,7 +349,6 @@ bool Robot::enable() {
   return true;
 }
 bool Robot::move_pose(float x, float y, float z, float rx, float ry, float rz) {
-  push_log("[move_pose] start");
   float x1[6] = {x, y, z, rx, ry, rz};
   // xyz、rxryrzの速度、加速度を指定
   float tvel[2] = { 50, 50 };
@@ -356,11 +357,9 @@ bool Robot::move_pose(float x, float y, float z, float rx, float ry, float rz) {
   float ttime = 0;
   // 移動が完了するまでブロックする
   bool ret = Drfl.movel(x1, tvel, tacc, ttime);
-  push_log("[move_pose] end");
   return ret;
 }
 bool Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) {
-  push_log("[move_joint] start");
   float x1[6] = {x, y, z, rx, ry, rz};
   // 速度、加速度
   float tvel = 10;
@@ -369,11 +368,9 @@ bool Robot::move_joint(float x, float y, float z, float rx, float ry, float rz) 
   float ttime = 0;
   // 移動が完了するまでブロックする
   bool ret = Drfl.movej(x1, tvel, tacc, ttime);
-  push_log("[move_joint] end");
   return ret;
 }
 bool Robot::move_default_pose_until_completion() {
-  push_log("[move_default_pose_until_completion] start");
   float* x1 = default_pose_.data();
   // xyz、rxryrzの速度、加速度を指定
   float tvel[2] = { 50, 50 };
@@ -388,7 +385,6 @@ bool Robot::move_default_pose_until_completion() {
       break;
     }
   }
-  push_log("[move_default_pose_until_completion] end");
   return ret;
 }
 std::vector<float> Robot::get_default_pose() {
