@@ -160,7 +160,7 @@ class Doosan_CON:
         # ロボット固有の処理を含む
         try:
             if self.robot is None:
-                self.robot = DoosanRobot(ROBOT_IP, "queue")
+                self.robot = DoosanRobot(ROBOT_IP, "queue", t_intv)
                 self.init_robot_log_loop()
                 if not self.robot.start():
                     raise ValueError("Failed to start robot")
