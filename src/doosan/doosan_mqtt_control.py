@@ -14,7 +14,7 @@ from .mqtt_recv import MQTT_Recv
 
 
 class ProcessManager:
-    def __init__(self):
+    def __init__(self, use_command_queue: bool = False):
         # mp.set_start_method('spawn')
         sz = SHM_SIZE * np.dtype('float32').itemsize
         try:
@@ -65,6 +65,7 @@ class ProcessManager:
         self.state_control = False
         self.state_monitor_gui = False
         self.log_queue = multiprocessing.Queue()
+        self.command_queue = multiprocessing.Queue() if use_command_queue else None
         self.recvP = None
         self.monP = None
         self.ctrlP = None
@@ -81,7 +82,8 @@ class ProcessManager:
             target=self.recv.run_proc,
             args=(self.mqtt_control_dict,
                   self.mqtt_control_lock,
-                  self.log_queue),
+                  self.log_queue,
+                  self.command_queue),
             name="MQTT-recv")
         self.recvP.start()
         self.state_recv_mqtt = True

@@ -29,6 +29,7 @@ ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
 ROBOT_MODEL = os.getenv("ROBOT_MODEL","ur-real")
 MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "mgr")
 MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "dev")+"/"+ROBOT_UUID
+MQTT_COMMAND_TOPIC = os.getenv("MQTT_COMMAND_TOPIC", "dev") + "/" + ROBOT_UUID + "/command"
 MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
 
 
@@ -36,6 +37,7 @@ class MQTT_Recv:
     def __init__(self):
         self.mqtt_ctrl_topic = None
         self.last_registered = None
+        self.command_queue = None
  
     def on_connect(self, client, userdata, connect_flags, reason_code, properties):
         # ロボットのメタ情報の中身はとりあえず
@@ -62,6 +64,9 @@ class MQTT_Recv:
             self.last_registered = time.time()
             self.client.subscribe(MQTT_MANAGE_RCV_TOPIC)
             self.logger.info("subscribe to: " + MQTT_MANAGE_RCV_TOPIC)
+            # コマンドトピックの購読
+            self.client.subscribe(MQTT_COMMAND_TOPIC)
+            self.logger.info("subscribe to: " + MQTT_COMMAND_TOPIC)
         else:
             self.logger.info("MQTT:Connected with result code " + str(rc),
                              "subscribe ctrl", MQTT_CTRL_TOPIC)
@@ -80,6 +85,11 @@ class MQTT_Recv:
             self.logger.warning("MQTT Unexpected disconnection.")
 
     def on_message(self, client, userdata, msg):
+        # コマンドトピックの処理
+        if msg.topic == MQTT_COMMAND_TOPIC:
+            self._handle_command(msg.payload)
+            return
+
         if msg.topic == self.mqtt_ctrl_topic:
             js = json.loads(msg.payload)
 
@@ -137,6 +147,22 @@ class MQTT_Recv:
         else:
             self.logger.warning("not subscribe msg" + msg.topic)
 
+    def _handle_command(self, payload):
+        """MQTTコマンドを処理してキューに追加"""
+        try:
+            cmd = json.loads(payload)
+            if "command" not in cmd:
+                self.logger.warning("Invalid command: missing 'command' key")
+                return
+
+            if self.command_queue is not None:
+                self.command_queue.put(cmd)
+                self.logger.info(f"Command queued: {cmd.get('command')}")
+            else:
+                self.logger.warning("Command queue not initialized")
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse command: {e}")
+
     def connect_mqtt(self):
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -156,13 +182,15 @@ class MQTT_Recv:
         self.logger.addHandler(self.handler)
         self.logger.setLevel(logging.INFO)
 
-    def run_proc(self, mqtt_control_dict, mqtt_control_lock, log_queue):
+    def run_proc(self, mqtt_control_dict, mqtt_control_lock, log_queue,
+                 command_queue=None):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = multiprocessing.shared_memory.SharedMemory(SHM_NAME)
         self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
         self.mqtt_control_dict = mqtt_control_dict
         self.mqtt_control_lock = mqtt_control_lock
+        self.command_queue = command_queue
         self.connect_mqtt()
         while True:
             # 30分ごとに再登録
