@@ -17,27 +17,33 @@ from .log import MicrosecondFormatter
 class HeadlessLoop:
     """Headlessモード (GUIなし) でのMQTTコマンド制御ループ"""
 
-    # サポートするコマンドの定義
+    # MQTTによる指令がサポートされるコマンド
     SUPPORTED_COMMANDS = {
-        # 引数なしコマンド
-        "connect_robot": {"params": [], "description": "ロボット接続"},
-        "connect_mqtt": {"params": [], "description": "MQTT接続"},
-        "enable": {"params": [], "description": "ロボット有効化"},
-        "disable": {"params": [], "description": "ロボット無効化"},
-        "tidy_pose": {"params": [], "description": "待機姿勢"},
-        "clear_error": {"params": [], "description": "エラークリア"},
-        "release_hand": {"params": [], "description": "ハンドリリース"},
-        "start_mqtt_control": {"params": [], "description": "MQTT制御開始"},
-        "stop_mqtt_control": {"params": [], "description": "MQTT制御停止"},
-        "demo_put_down_box": {"params": [], "description": "デモ実行"},
-        "line_cut": {"params": [], "description": "カッター移動"},
-        "shutdown": {"params": [], "description": "シャットダウン"},
-        # 引数ありコマンド
-        "tool_change": {"params": ["tool_id"], "description": "ツール交換"},
-        "set_area_enabled": {"params": ["enabled"], "description": "エリア設定"},
-        "jog_joint": {"params": ["joint", "direction"], "description": "関節ジョグ"},
-        "jog_tcp": {"params": ["axis", "direction"], "description": "TCPジョグ"},
-        "change_log_file": {"params": [], "description": "ログファイル変更"},
+        "enable": {"params": [], "description": "アームを移動させるための電源をONにする"},
+        "disable": {"params": [], "description": "アームを移動させるための電源をOFFにする"},
+        "tidy_pose": {"params": [], "description": "ロボットを待機姿勢に移動する"},
+        "release_hand": {"params": [], "description": "ハンドを最大まで開く"},
+        "start_mqtt_control": {"params": [], "description": "MQTTでのリアルタイム制御を開始する"},
+        "stop_mqtt_control": {"params": [], "description": "MQTTでのリアルタイム制御を停止する"},
+        "change_log_file": {"params": [], "description": "ログ出力ディレクトリを現在時刻のディレクトリに切り替える"},
+        "shutdown": {"params": [], "description": "ロボット制御プログラムを終了する"},
+        "jog_joint": {
+            "params": ["joint", "direction"],
+            "description": "関節角度制御によるジョグ。jointは関節の順番(0-5)、directionは角度の移動量(deg)"
+        },
+        "jog_tcp": {
+            "params": ["axis", "direction"],
+            "description": "TCP座標系でのジョグ。axisは軸(0:X,1:Y,2:Z,3:RX,4:RY,5:RZ)、directionは移動量(mm)"
+        },
+        # 起動時に自動的に実行するため公開しない
+        # "connect_robot": {"params": [], "description": "ロボット接続"},
+        # "connect_mqtt": {"params": [], "description": "MQTT接続"},
+        # 本ロボットでは使用しないので公開しない
+        # "clear_error": {"params": [], "description": "エラークリア"},
+        # "demo_put_down_box": {"params": [], "description": "デモ実行"},
+        # "line_cut": {"params": [], "description": "カッター移動"},
+        # "tool_change": {"params": ["tool_id"], "description": "ツール交換"},
+        # "set_area_enabled": {"params": ["enabled"], "description": "エリア設定"},
     }
 
     def __init__(self, use_joint_monitor_plot: bool = False, **kwargs):
@@ -49,7 +55,7 @@ class HeadlessLoop:
         self.logging_dir: Optional[str] = None
 
     def _signal_handler(self, signum, frame):
-        """シグナルハンドラ: グレースフルシャットダウン"""
+        """Graceful shutdownのためのシグナルハンドラ"""
         if self.logger:
             self.logger.info(f"Received signal {signum}, initiating shutdown...")
         self.running = False
@@ -106,14 +112,17 @@ class HeadlessLoop:
         """コマンドを実行"""
         command_name = cmd.get("command")
 
+        # 公開コマンドかチェック
         if command_name not in self.SUPPORTED_COMMANDS:
             self.logger.warning(f"Unknown command: {command_name}")
             return
 
         self.logger.info(f"Executing command: {command_name}")
 
+        # パラメータを取得
+        params = cmd.get("params", {})
+
         try:
-            # コマンドのディスパッチ
             if command_name == "connect_robot":
                 self._cmd_connect_robot()
             elif command_name == "connect_mqtt":
@@ -137,29 +146,29 @@ class HeadlessLoop:
             elif command_name == "line_cut":
                 self._cmd_line_cut()
             elif command_name == "tool_change":
-                tool_id = cmd.get("tool_id")
+                tool_id = params.get("tool_id")
                 if tool_id is None:
-                    self.logger.error("tool_change: missing tool_id")
+                    self.logger.error("tool_change: missing params.tool_id")
                     return
                 self._cmd_tool_change(int(tool_id))
             elif command_name == "set_area_enabled":
-                enabled = cmd.get("enabled")
+                enabled = params.get("enabled")
                 if enabled is None:
-                    self.logger.error("set_area_enabled: missing enabled")
+                    self.logger.error("set_area_enabled: missing params.enabled")
                     return
                 self._cmd_set_area_enabled(bool(enabled))
             elif command_name == "jog_joint":
-                joint = cmd.get("joint")
-                direction = cmd.get("direction")
+                joint = params.get("joint")
+                direction = params.get("direction")
                 if joint is None or direction is None:
-                    self.logger.error("jog_joint: missing joint or direction")
+                    self.logger.error("jog_joint: missing params.joint or params.direction")
                     return
                 self._cmd_jog_joint(int(joint), float(direction))
             elif command_name == "jog_tcp":
-                axis = cmd.get("axis")
-                direction = cmd.get("direction")
+                axis = params.get("axis")
+                direction = params.get("direction")
                 if axis is None or direction is None:
-                    self.logger.error("jog_tcp: missing axis or direction")
+                    self.logger.error("jog_tcp: missing params.axis or params.direction")
                     return
                 self._cmd_jog_tcp(int(axis), float(direction))
             elif command_name == "change_log_file":
@@ -289,9 +298,12 @@ class HeadlessLoop:
             self.logger.info("Cleaning up...")
         if self.pm is not None:
             self.pm.stop_all_processes()
+        print("All subprocesses stopped.")
         if self.listener is not None:
             self.listener.stop()
+        print("Logging listener stopped.")
         logging.shutdown()
+        print("Logging shutdown complete.")
 
     def mainloop(self) -> None:
         """メインループ"""

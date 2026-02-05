@@ -29,8 +29,10 @@ source .venv/bin/activate
 
 その状態でロボット制御コードを実行する。
 
+**GUIを使用する場合**
+
 ```sh
-python src/main.py
+python src/main.py --gui
 ```
 
 以下のようなGUI画面が起動する。
@@ -51,6 +53,51 @@ MQTTでの制御中に、エラーが起きた場合は、1度自動復帰を試
 `ReleaseHand`でハンドを最大まで開くことができる。`TidyPose`でロボットの先端がロボットの台の中央付近になり、先端が縦向きになる、片付け用の姿勢に移動できる。`ChangeLogFile`でログ出力ディレクトリを現在の時刻の`log/<YY-mm-dd>/<HH-MM-SS>`に切り替えることができる。`DisableRobot`でモーターをOFFにできる。閉じるボタンでロボット制御コードを終了できる。
 
 ジョグ（関節空間でのジョグは`Joint Jog`, ベース座標系（X, Y, X, RX, RY, RZ）でのジョグは`TCP Jog`）が可能である。ジョグは長押しするとジョグ速度が大きくなる。ベース座標系でのジョグは特異姿勢付近でエラーになることがある。
+
+**GUIを使用しない場合**
+
+```sh
+python src/main.py
+```
+
+起動時に自動的にロボットとMQTTサーバーに接続する。
+
+ロボットの制御は、MQTTトピック`dev/<ROBOT_UUID>/command`（`ROBOT_UUID`は`src/doosan/.env`で環境変数として指定したロボットのUUID）に、JSON形式のコマンドのメッセージをパブリッシュすることで制御できる。
+
+ロボットの状態は、MQTTトピック`robot/<ROBOT_UUID>`にパブリッシュされる。
+
+ロボット制御側で、MQTTでの制御を受け付けるようにするためには、以下の手順で操作を行う。例として、`mosquitto_pub`コマンドを使用する場合を示す。
+
+```sh
+# 別ターミナルで実行する
+# MQTT_HOSTは環境変数として指定したMQTTサーバーのホスト名、ROBOT_UUIDは環境変数として指定したロボットのUUID
+# 1. ロボット有効化。成功すればトピック`robot/<ROBOT_UUID>`中の`enabled`がtrueになる
+mosquitto_pub -h <MQTT_HOST> -t "dev/<ROBOT_UUID>/command" -m '{"command": "enable"}'
+# 2. MQTT制御開始。成功すればトピック`robot/<ROBOT_UUID>`中の`mqtt_control`がtrueになる
+mosquitto_pub -h <MQTT_HOST> -t "dev/<ROBOT_UUID>/command" -m '{"command": "start_mqtt_control"}'
+```
+
+コマンドのメッセージはJSON形式で、以下のいずれかの形式で送信する:
+
+```json
+{"command": "<コマンド名>"}
+{"command": "<コマンド名>", "params": {"<パラメータ名>": <値>, ...}}
+```
+
+サポートされるコマンド一覧:
+
+| コマンド | パラメータ | 説明 |
+|----------|------------|------|
+| enable | - | アームを移動させるための電源をONにする |
+| disable | - | アームを移動させるための電源をOFFにする |
+| tidy_pose | - | ロボットを待機姿勢に移動する |
+| release_hand | - | ハンドを最大まで開く |
+| start_mqtt_control | - | MQTTでのリアルタイム制御を開始する |
+| stop_mqtt_control | - | MQTTでのリアルタイム制御を停止する |
+| change_log_file | - | ログ出力ディレクトリを現在時刻の<br>`log/<YY-mm-dd>/<HH-MM-SS>`に切り替える |
+| shutdown | - | ロボット制御プログラムを終了する |
+| jog_joint | joint: int,<br>direction: float | 関節角度制御によるジョグ。<br>jointは関節の順番を表し、0-5の値を取りうる。<br>directionは角度の移動量（deg）を表す |
+| jog_tcp | axis: int,<br>direction: float | TCP座標系でのジョグ。<br>axisは軸を表し、0:X, 1:Y, 2:Z, 3:RX, 4:RY, 5:RZに対応。<br>directionは移動量（mm）を表す |
 
 **3 ロボットの終了**
 

@@ -143,22 +143,36 @@ class ProcessManager:
         self.ar[16] = 1
         if self.recvP is not None:
             self.recvP.join()
+            print("MQTT receive process joined.")
         if self.monP is not None:
             self.monP.join()
+            print("Monitor process joined.")
         if self.ctrlP is not None:
             self.ctrlP.join()
+            print("Control process joined.")
         if self.ctrl_archiverP is not None:
             self.ctrl_archiverP.join()
+            print("Control archiver process joined.")
         if self.monitor_guiP is not None:
             self.monitor_guiP.join()
+            print("Monitor GUI process joined.")
+        print("All subprocesses joined.")
         self.sm.close()
+        print("Shared memory closed.")
         self.sm.unlink()
+        print("Shared memory unlinked.")
         self.manager.shutdown()
+        print("Manager shutdown complete.")
         self.main_to_control_pipe.close()
+        print("Control main pipe closed.")
         self.control_pipe.close()
+        print("Control pipe closed.")
         self.main_to_monitor_pipe.close()
+        print("Monitor main pipe closed.")
         self.monitor_pipe.close()
+        print("Monitor pipe closed.")
         self.control_to_archiver_queue.close()
+        print("Control to archiver queue closed.")
 
     def _send_command_to_control(self, command):
         wait = command.get("wait", False)
