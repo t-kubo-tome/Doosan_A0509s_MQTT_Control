@@ -1,6 +1,7 @@
 """Headlessモード (GUIなし) でのMQTTコマンド制御"""
 
 import datetime
+import json
 import logging
 import logging.handlers
 import multiprocessing
@@ -8,7 +9,11 @@ import os
 import queue
 import signal
 import time
+from pathlib import Path
 from typing import Optional
+
+from dotenv import load_dotenv
+from paho.mqtt import client as mqtt
 
 from .doosan_mqtt_control import ProcessManager
 from .log import MicrosecondFormatter
@@ -35,6 +40,14 @@ class HeadlessLoop:
             "params": ["axis", "direction"],
             "description": "TCP座標系でのジョグ。axisは軸(0:X,1:Y,2:Z,3:RX,4:RY,5:RZ)、directionは移動量(mm)"
         },
+        "get_command_list": {
+            "params": [],
+            "description": "サポートされているコマンド一覧を取得する"
+        },
+        "get_joint_names": {
+            "params": [],
+            "description": "ジョイントの数と名前を取得する"
+        },
         # 起動時に自動的に実行するため公開しない
         # "connect_robot": {"params": [], "description": "ロボット接続"},
         # "connect_mqtt": {"params": [], "description": "MQTT接続"},
@@ -53,6 +66,19 @@ class HeadlessLoop:
         self.logger: Optional[logging.Logger] = None
         self.listener: Optional[logging.handlers.QueueListener] = None
         self.logging_dir: Optional[str] = None
+        self.response_client: Optional[mqtt.Client] = None
+        self.robot_uuid: Optional[str] = None
+        self.mqtt_server: Optional[str] = None
+
+    def _setup_response_mqtt(self) -> None:
+        """MQTTレスポンス用クライアントを初期化"""
+        load_dotenv(Path(__file__).parent / ".env")
+        self.robot_uuid = os.getenv("ROBOT_UUID", "ur-real")
+        self.mqtt_server = os.getenv("MQTT_SERVER", "localhost")
+        self.response_client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+        self.response_client.connect(self.mqtt_server, 1883, 60)
+        self.response_client.loop_start()
 
     def _signal_handler(self, signum, frame):
         """Graceful shutdownのためのシグナルハンドラ"""
@@ -107,6 +133,10 @@ class HeadlessLoop:
         # シグナルハンドラの設定
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+
+        # MQTTレスポンス用クライアントの初期化
+        self._setup_response_mqtt()
+        self.logger.info(f"Response MQTT client connected to {self.mqtt_server}")
 
     def _execute_command(self, cmd: dict) -> None:
         """コマンドを実行"""
@@ -175,6 +205,10 @@ class HeadlessLoop:
                 self._cmd_change_log_file()
             elif command_name == "shutdown":
                 self._cmd_shutdown()
+            elif command_name == "get_command_list":
+                self._cmd_get_command_list()
+            elif command_name == "get_joint_names":
+                self._cmd_get_joint_names()
 
             self.logger.info(f"Command completed: {command_name}")
 
@@ -292,6 +326,37 @@ class HeadlessLoop:
         self.logger.info("Shutdown command received")
         self.running = False
 
+    def _cmd_get_command_list(self):
+        """サポートされているコマンド一覧をMQTTで送信"""
+        if self.response_client is None:
+            self.logger.warning("Response MQTT client not initialized")
+            return
+        response = {
+            "devId": self.robot_uuid,
+            "command": "get_command_list",
+            "timestamp": time.time(),
+            "supported_commands": self.SUPPORTED_COMMANDS
+        }
+        topic = f"dev/{self.robot_uuid}/response"
+        self.response_client.publish(topic, json.dumps(response, ensure_ascii=False))
+        self.logger.info(f"Sent command list to {topic}")
+
+    def _cmd_get_joint_names(self):
+        """ジョイントの数と名前をMQTTで送信"""
+        if self.response_client is None:
+            self.logger.warning("Response MQTT client not initialized")
+            return
+        joint_names = ["J1", "J2", "J3", "J4", "J5", "J6"]
+        response = {
+            "devId": self.robot_uuid,
+            "command": "get_joint_names",
+            "timestamp": time.time(),
+            "joint_names": joint_names
+        }
+        topic = f"dev/{self.robot_uuid}/response"
+        self.response_client.publish(topic, json.dumps(response, ensure_ascii=False))
+        self.logger.info(f"Sent joint names to {topic}")
+
     def _cleanup(self) -> None:
         """クリーンアップ処理"""
         if self.logger:
@@ -299,6 +364,10 @@ class HeadlessLoop:
         if self.pm is not None:
             self.pm.stop_all_processes()
         print("All subprocesses stopped.")
+        if self.response_client is not None:
+            self.response_client.loop_stop()
+            self.response_client.disconnect()
+        print("Response MQTT client disconnected.")
         if self.listener is not None:
             self.listener.stop()
         print("Logging listener stopped.")

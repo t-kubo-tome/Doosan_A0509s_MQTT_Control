@@ -98,6 +98,37 @@ mosquitto_pub -h <MQTT_HOST> -t "dev/<ROBOT_UUID>/command" -m '{"command": "star
 | shutdown | - | ロボット制御プログラムを終了する |
 | jog_joint | joint: int,<br>direction: float | 関節角度制御によるジョグ。<br>jointは関節の順番を表し、0-5の値を取りうる。<br>directionは角度の移動量（deg）を表す |
 | jog_tcp | axis: int,<br>direction: float | TCP座標系でのジョグ。<br>axisは軸を表し、0:X, 1:Y, 2:Z, 3:RX, 4:RY, 5:RZに対応。<br>directionは移動量（mm）を表す |
+| get_command_list | - | サポートされているコマンド一覧を取得する。<br>結果はレスポンストピックに送信される |
+| get_joint_names | - | ジョイントの数と名前を取得する。<br>結果はレスポンストピックに送信される |
+
+**レスポンストピック**
+
+`get_command_list`や`get_joint_names`などの情報取得コマンドの結果は、MQTTトピック`dev/<ROBOT_UUID>/response`にJSON形式でパブリッシュされる。
+
+`get_command_list`のレスポンス例:
+
+```json
+{
+  "devId": "<ROBOT_UUID>",
+  "command": "get_command_list",
+  "timestamp": 1770281593.469537,
+  "supported_commands": {
+    "enable": {"params": [], "description": "アームを移動させるための電源をONにする"},
+    ...
+  }
+}
+```
+
+`get_joint_names`のレスポンス例:
+
+```json
+{
+  "devId": "<ROBOT_UUID>",
+  "command": "get_joint_names",
+  "timestamp": 1770281593.469537,
+  "joint_names": ["J1", "J2", "J3", "J4", "J5", "J6"]
+}
+```
 
 **3 ロボットの終了**
 
