@@ -2083,23 +2083,25 @@ class Doosan_CON:
         self.robot.disable()
         self.robot.stop()
 
-    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue, monitor_queue):
-        self.setup_logger(log_queue)
-        self.logger.info("Process started")
-        self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
-        self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
-        self.slave_mode_lock = slave_mode_lock
-        self.control_pipe = control_pipe
-        self.logging_dir = logging_dir
-        self.control_to_archiver_queue = control_to_archiver_queue
-        self.monitor_queue = monitor_queue
-
-        self.init_robot()
-        self.init_realtime()
+    def receive_command_loop(self) -> None:
+        """コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う"""
         while True:
-            if control_pipe.poll(timeout=1):
-                command = control_pipe.recv()
+            if self.control_pipe.poll(timeout=1):
+                command = self.control_pipe.recv()
                 status = False
+                wait = command.get("wait", False)
+                # MQTTリアルタイム制御中は他のコマンドを受け付けず失敗をすぐに返す
+                # NOTE: line_cut, tool_change, demo_put_down_box, change_log_fileは
+                # VRからMQTTリアルタイム制御中でも実行できるため、実装できなくはないが、
+                # コマンドからMQTTリアルタイム制御中で実行するケースはないと想定されるため、実装しない
+                if self.pose[15] == 1:
+                    message = "MQTT control in progress. Consider stopping MQTT control first."
+                    if wait:
+                        self.control_pipe.send(
+                            {"status": status, "message": message})
+                    continue
+                # MQTTリアルタイム制御中でなければ通常のコマンド処理を行う
+                # TODO: status, messageを各コマンドで追加
                 if command["command"] == "enable":
                     status = self.enable()
                 elif command["command"] == "disable":
@@ -2118,7 +2120,7 @@ class Doosan_CON:
                 elif command["command"] == "clear_error":
                     self.clear_error()
                 elif command["command"] == "start_mqtt_control":
-                    self.mqtt_control_loop()
+                    self.start_mqtt_control_loop = True
                 elif command["command"] == "tool_change":
                     self.logger.info("Tool change not during MQTT control")
                     self.tool_change_not_in_rt()
@@ -2139,13 +2141,46 @@ class Doosan_CON:
                 else:
                     self.logger.warning(
                         f"Unknown command: {command['command']}")
-                wait = command.get("wait", False)
                 if wait:
-                    control_pipe.send({"status": status})
+                    self.control_pipe.send({"status": status})
+
+    def init_receive_command_loop(self):
+        self.receive_command_thread = threading.Thread(
+            target=self.receive_command_loop)
+        self.receive_command_thread.start()
+    
+    def del_receive_command_loop(self):
+        if hasattr(self, 'receive_command_thread'):
+            self.receive_command_thread.join()
+
+    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue, monitor_queue):
+        self.setup_logger(log_queue)
+        self.logger.info("Process started")
+        self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
+        self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.slave_mode_lock = slave_mode_lock
+        self.control_pipe = control_pipe
+        self.logging_dir = logging_dir
+        self.control_to_archiver_queue = control_to_archiver_queue
+        self.monitor_queue = monitor_queue
+
+        self.init_robot()
+        self.init_realtime()
+        # リアルタイム性を考慮し、MQTTリアルタイム制御はメインスレッドで行う
+        # コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う
+        self.init_receive_command_loop()
+        self.start_mqtt_control_loop = False
+        # 外のループでMQTTリアルタイム制御の開始とプロセス終了を監視する
+        while True:
+            if self.start_mqtt_control_loop:
+                self.start_mqtt_control_loop = False
+                # 内のループでMQTTリアルタイム制御を行う
+                self.mqtt_control_loop()
             if self.pose[32] == 1:
                 self.del_robot()
                 self.del_robot_log()
                 self.del_monitor_loop()
+                self.del_receive_command_loop()
                 self.sm.close()
                 self.control_to_archiver_queue.close()
                 self.monitor_queue.close()
@@ -2154,6 +2189,8 @@ class Doosan_CON:
                 self.handler.close()
                 self.robot_handler.close()
                 break
+            # 監視間隔はリアルタイムでなくて良い
+            time.sleep(0.1)
 
 
 class Doosan_CON_Archiver:
