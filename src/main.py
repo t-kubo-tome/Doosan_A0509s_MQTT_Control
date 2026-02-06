@@ -32,6 +32,11 @@ if __name__ == '__main__':
         action="store_true",
         help="GUIを使用する",
     )
+    parser.add_argument(
+        "--use-joint-monitor-plot",
+        action="store_true",
+        help="関節角度のモニタープロットを使用する。GUIを使用する場合のみ指定可能",
+    )
     args = parser.parse_args()
     kwargs = vars(args)
     import os

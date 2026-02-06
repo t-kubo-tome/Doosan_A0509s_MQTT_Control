@@ -59,8 +59,7 @@ class HeadlessLoop:
         # "set_area_enabled": {"params": ["enabled"], "description": "エリア設定"},
     }
 
-    def __init__(self, use_joint_monitor_plot: bool = False, **kwargs):
-        self.use_joint_monitor_plot = use_joint_monitor_plot
+    def __init__(self, **kwargs):
         self.running = True
         self.pm: Optional[ProcessManager] = None
         self.logger: Optional[logging.Logger] = None
@@ -222,8 +221,6 @@ class HeadlessLoop:
             return
         self.pm.startControl(logging_dir=self.logging_dir)
         self.pm.startMonitor(logging_dir=self.logging_dir)
-        if self.use_joint_monitor_plot:
-            self.pm.startMonitorGUI()
 
     def _cmd_connect_mqtt(self):
         if self.pm.state_recv_mqtt:
