@@ -15,6 +15,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
+from .config import ROBOT_MODEL, ROBOT_VENDOR
 from .doosan_mqtt_control import ProcessManager
 from .log import MicrosecondFormatter
 
@@ -332,6 +333,8 @@ class HeadlessLoop:
             "devId": self.robot_uuid,
             "command": "get_command_list",
             "timestamp": time.time(),
+            "vendor": ROBOT_VENDOR,
+            "model": ROBOT_MODEL,
             "supported_commands": self.SUPPORTED_COMMANDS
         }
         topic = f"dev/{self.robot_uuid}/response"
@@ -348,6 +351,8 @@ class HeadlessLoop:
             "devId": self.robot_uuid,
             "command": "get_joint_names",
             "timestamp": time.time(),
+            "vendor": ROBOT_VENDOR,
+            "model": ROBOT_MODEL,
             "joint_names": joint_names
         }
         topic = f"dev/{self.robot_uuid}/response"

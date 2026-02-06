@@ -111,6 +111,8 @@ mosquitto_pub -h <MQTT_HOST> -t "dev/<ROBOT_UUID>/command" -m '{"command": "star
 {
   "devId": "<ROBOT_UUID>",
   "command": "get_command_list",
+  "vendor": "Doosan Robotics",
+  "model": "A0509s",
   "timestamp": 1770281593.469537,
   "supported_commands": {
     "enable": {"params": [], "description": "アームを移動させるための電源をONにする"},
@@ -125,6 +127,8 @@ mosquitto_pub -h <MQTT_HOST> -t "dev/<ROBOT_UUID>/command" -m '{"command": "star
 {
   "devId": "<ROBOT_UUID>",
   "command": "get_joint_names",
+  "vendor": "Doosan Robotics",
+  "model": "A0509s",
   "timestamp": 1770281593.469537,
   "joint_names": ["J1", "J2", "J3", "J4", "J5", "J6"]
 }
