@@ -41,7 +41,7 @@ if __name__ == '__main__':
     # コードが変更される可能性があるため、変更しやすいように引数で渡すのではなく
     # 環境変数でグローバル変数として使う
     import os
-    os.environ["TOOL_ID"] = str(kwargs.pop("tool_id"))
+    os.environ["TOOL_ID"] = str(kwargs.pop("tool_id", 1))
 
     if kwargs.pop("gui"):   
         import tkinter as tk
