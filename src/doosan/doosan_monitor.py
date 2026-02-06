@@ -2,6 +2,7 @@
 
 from enum import auto, Enum
 import logging
+import queue
 from typing import Any, Dict, List, TextIO
 from paho.mqtt import client as mqtt
 
@@ -118,8 +119,16 @@ class Doosan_MON:
             # ログファイル変更時
             if self.pose[34] == 1:
                 return LoopResult.LOG_FILE_CHANGED
+            # 中断時
+            if self.pose[32] == 1:
+                return LoopResult.INTERRUPTED
+            # ループが回り続けるようにタイムアウトを設定
+            try:
+                actual_joint_js = self.monitor_queue.get(
+                    block=True, timeout=1)
+            except queue.Empty:
+                continue
 
-            actual_joint_js = self.monitor_queue.get()
             now = actual_joint_js["time"]
             if last == 0:
                 last = now
@@ -158,8 +167,6 @@ class Doosan_MON:
                 )
                 js = json.dumps(datum, ensure_ascii=False)
                 f.write(js + "\n")
-            if self.pose[32] == 1:
-                return LoopResult.INTERRUPTED
 
     def setup_logger(self, log_queue):
         self.logger = logging.getLogger("MON")
