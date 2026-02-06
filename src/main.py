@@ -16,7 +16,7 @@ if __name__ == '__main__':
     # そのファイルを読み込むようにすれば管理はできるが、エラーで終了したときに
     # ファイルの情報が正確かいまのところ保証できないので、指定してもらうことにしている
     # 管理する方法が確立されたら変更される可能性あり
-    from .doosan.doosan_tools import tool_infos
+    from doosan.doosan_tools import tool_infos
     parser.add_argument(
         "--tool-id",
         type=int,
