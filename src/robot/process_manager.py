@@ -1,4 +1,4 @@
-# DoosanをMQTTで制御する
+# 複数プロセスを管理する
 
 import multiprocessing
 import multiprocessing.shared_memory
@@ -9,7 +9,7 @@ import numpy as np
 from .config import SHM_NAME, SHM_SIZE, ROBOT_NAME
 from .doosan_control import Doosan_CON, Doosan_CON_Archiver
 from .doosan_monitor import Doosan_MON
-from .monitor_gui import run_joint_monitor_gui
+from ..common.monitor_gui import run_joint_monitor_gui
 from .mqtt_recv import MQTT_Recv
 
 

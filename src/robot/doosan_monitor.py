@@ -19,10 +19,10 @@ import numpy as np
 
 from dotenv import load_dotenv
 
+from ..common.utils import rad2deg_list
+
 from .config import SHM_NAME, SHM_SIZE, T_INTV
-from .doosan_tools import tool_infos, tool_classes
-from .utils import rad2deg_list
-# Robot specific modules
+from .tools import tool_infos, tool_classes
 
 
 # パラメータ

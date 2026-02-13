@@ -17,7 +17,7 @@ import sys
 import uuid
 
 from .config import SHM_NAME, SHM_SIZE
-from .utils import rad2deg_list
+from ..common.utils import rad2deg_list
 
 from dotenv import load_dotenv
 

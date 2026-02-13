@@ -17,7 +17,7 @@ if __name__ == '__main__':
     # ファイルの情報が正確かいまのところ保証できないので、指定してもらうことにしている
     # 管理する方法が確立されたら変更される可能性あり
     # ツールが1つの場合は1、2つ以上の場合はコマンドラインでの指定が必須
-    from common.doosan_tools import tool_infos
+    from robot.tools import tool_infos
     parser.add_argument(
         "--tool-id",
         type=int,

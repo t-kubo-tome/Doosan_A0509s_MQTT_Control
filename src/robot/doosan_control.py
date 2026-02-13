@@ -20,15 +20,15 @@ import numpy as np
 from dotenv import load_dotenv
 
 # Robot shared modules
-from .filter import SMAFilter
-from .interpolate import DelayedInterpolator
+from ..common.filter import SMAFilter
+from ..common.interpolate import DelayedInterpolator
+from ..common.utils import deg2rad_list
 
 # Robot specific modules
 from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
 from .doosan_robot import DoosanRobot, ROBOT_STATE
-from .doosan_tools import tool_infos, tool_classes, tool_base
+from .tools import tool_infos, tool_classes, tool_base
 from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
-from .utils import deg2rad_list
 
 
 # パラメータ

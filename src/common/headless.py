@@ -15,13 +15,13 @@ from typing import Optional
 from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
-from .config import (
+from ..robot.config import (
     ROBOT_MODEL,
     ROBOT_VENDOR,
     SUPPORTED_COMMANDS_API_ONLY,
     SUPPORTED_COMMANDS_COMMON,
 )
-from .doosan_mqtt_control import ProcessManager
+from ..robot.process_manager import ProcessManager
 from .log import MicrosecondFormatter
 
 

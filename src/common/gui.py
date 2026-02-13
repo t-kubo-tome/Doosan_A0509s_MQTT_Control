@@ -11,13 +11,13 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import List, Optional
 
-from .config import (
+from ..robot.config import (
     ROBOT_NAME,
     SUPPORTED_COMMANDS_COMMON,
     SUPPORTED_COMMANDS_GUI_ONLY,
 )
-from .doosan_mqtt_control import ProcessManager
-from .doosan_tools import tool_infos
+from ..robot.process_manager import ProcessManager
+from ..robot.tools import tool_infos
 from .log import MicrosecondFormatter
 from .utils import rad2deg_list
 
