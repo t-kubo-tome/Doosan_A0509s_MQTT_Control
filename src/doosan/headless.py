@@ -75,6 +75,7 @@ class HeadlessLoop:
         load_dotenv(Path(__file__).parent / ".env")
         self.robot_uuid = os.getenv("ROBOT_UUID", "ur-real")
         self.mqtt_server = os.getenv("MQTT_SERVER", "localhost")
+        self.response_topic = f"dev/{self.robot_uuid}/response"
         self.response_client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self.response_client.connect(self.mqtt_server, 1883, 60)
@@ -233,113 +234,128 @@ class HeadlessLoop:
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.enable()
+        output = self.pm.enable()
+        self._make_and_publish_response(**output)
 
     def _cmd_disable(self):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.disable()
+        output = self.pm.disable()
+        self._make_and_publish_response(**output)
 
     def _cmd_tidy_pose(self):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.tidy_pose()
+        output = self.pm.tidy_pose()
+        self._make_and_publish_response(**output)
 
     def _cmd_clear_error(self):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.clear_error()
+        output = self.pm.clear_error()
+        self._make_and_publish_response(**output)
 
     def _cmd_release_hand(self):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.release_hand()
+        output = self.pm.release_hand()
+        self._make_and_publish_response(**output)
 
     def _cmd_start_mqtt_control(self):
         if not (self.pm.state_control and self.pm.state_monitor and
                 self.pm.state_recv_mqtt):
             self.logger.warning("Not ready for MQTT control")
             return
-        self.pm.start_mqtt_control()
+        output = self.pm.start_mqtt_control()
+        self._make_and_publish_response(**output)
 
     def _cmd_stop_mqtt_control(self):
         if not (self.pm.state_control and self.pm.state_monitor and
                 self.pm.state_recv_mqtt):
             self.logger.warning("Not in MQTT control mode")
             return
-        self.pm.stop_mqtt_control()
+        output = self.pm.stop_mqtt_control()
+        self._make_and_publish_response(**output)
 
     def _cmd_demo_put_down_box(self):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.demo_put_down_box()
+        output = self.pm.demo_put_down_box()
+        self._make_and_publish_response(**output)
 
     def _cmd_line_cut(self):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.line_cut()
+        output = self.pm.line_cut()
+        self._make_and_publish_response(**output)
 
     def _cmd_tool_change(self, tool_id: int):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.tool_change(tool_id)
+        output = self.pm.tool_change(tool_id)
+        self._make_and_publish_response(**output)
 
     def _cmd_set_area_enabled(self, enabled: bool):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.set_area_enabled(enabled)
+        output = self.pm.set_area_enabled(enabled)
+        self._make_and_publish_response(**output)
 
     def _cmd_jog_joint(self, joint: int, direction: float):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.jog_joint(joint, direction)
+        output = self.pm.jog_joint(joint, direction)
+        self._make_and_publish_response(**output)
 
     def _cmd_jog_tcp(self, axis: int, direction: float):
         if not self.pm.state_control:
             self.logger.warning("Robot not connected")
             return
-        self.pm.jog_tcp(axis, direction)
+        output = self.pm.jog_tcp(axis, direction)
+        self._make_and_publish_response(**output)
 
     def _cmd_change_log_file(self):
         if self.listener is not None:
             self.listener.stop()
         self.logging_dir = self.get_logging_dir()
-        self.pm.change_log_file(self.logging_dir)
+        output = self.pm.change_log_file(self.logging_dir)
         self.logger.info(f"Changed log directory to {self.logging_dir}")
         # サブプロセスの完了を待つ
         while self.pm.ar[33] != 0 or self.pm.ar[34] != 0:
             time.sleep(0.1)
         self.setup_logging(self.pm.log_queue, self.logging_dir)
+        self._make_and_publish_response(**output)
 
     def _cmd_shutdown(self):
         self.logger.info("Shutdown command received")
         self.running = False
+        self._make_and_publish_response(
+            command="shutdown",
+            status=True,
+            message="",
+            result={}
+        )
 
     def _cmd_get_command_list(self):
         """サポートされているコマンド一覧をMQTTで送信"""
         if self.response_client is None:
             self.logger.warning("Response MQTT client not initialized")
             return
-        response = {
-            "devId": self.robot_uuid,
-            "command": "get_command_list",
-            "timestamp": time.time(),
-            "vendor": ROBOT_VENDOR,
-            "model": ROBOT_MODEL,
-            "supported_commands": self.SUPPORTED_COMMANDS
-        }
-        topic = f"dev/{self.robot_uuid}/response"
-        self.response_client.publish(topic, json.dumps(response, ensure_ascii=False))
-        self.logger.info(f"Sent command list to {topic}")
+        self._make_and_publish_response(
+            command="get_command_list",
+            status=True,
+            message="",
+            result={"supported_commands": self.SUPPORTED_COMMANDS}
+        )
 
     def _cmd_get_joint_names(self):
         """ジョイントの数と名前をMQTTで送信"""
@@ -347,17 +363,30 @@ class HeadlessLoop:
             self.logger.warning("Response MQTT client not initialized")
             return
         joint_names = ["J1", "J2", "J3", "J4", "J5", "J6"]
+        self._make_and_publish_response(
+            command="get_joint_names",
+            status=True,
+            message="",
+            result={"joint_names": joint_names},
+        )
+
+    def _make_and_publish_response(self, command: str, status: bool,
+                                   message: str, result: dict) -> None:  
+        if self.response_client is None:
+            self.logger.warning("Response MQTT client not initialized")
+            return
         response = {
             "devId": self.robot_uuid,
-            "command": "get_joint_names",
+            "command": command,
+            "status": status,
+            "message": message,
+            "result": result,
             "timestamp": time.time(),
             "vendor": ROBOT_VENDOR,
             "model": ROBOT_MODEL,
-            "joint_names": joint_names
         }
-        topic = f"dev/{self.robot_uuid}/response"
-        self.response_client.publish(topic, json.dumps(response, ensure_ascii=False))
-        self.logger.info(f"Sent joint names to {topic}")
+        self.response_client.publish(
+            self.response_topic, json.dumps(response, ensure_ascii=False))
 
     def _cleanup(self) -> None:
         """クリーンアップ処理"""
