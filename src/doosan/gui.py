@@ -11,7 +11,11 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import List, Optional
 
-from .config import ROBOT_NAME
+from .config import (
+    ROBOT_NAME,
+    SUPPORTED_COMMANDS_COMMON,
+    SUPPORTED_COMMANDS_GUI_ONLY,
+)
 from .doosan_mqtt_control import ProcessManager
 from .doosan_tools import tool_infos
 from .log import MicrosecondFormatter
@@ -119,8 +123,11 @@ class MQTTWin:
         self.setup_logging(log_queue=log_queue, logging_dir=self.logging_dir)
         self.setup_logger(log_queue=log_queue)
         self.gui_log_queue = queue.Queue()
+        self.supported_commands = (
+            SUPPORTED_COMMANDS_COMMON + SUPPORTED_COMMANDS_GUI_ONLY
+        )
         self.logger.info("Starting Process!")
- 
+
         self.root = root
         self.root.title(f"MQTT-{ROBOT_NAME} Controller")
         self.root.geometry("1100x1000")
@@ -133,16 +140,22 @@ class MQTTWin:
         self.button["ConnectRobot"] = tk.Button(self.root, text="ConnectRobot", padx=5,
                       command=self.ConnectRobot, state="normal")
         self.button["ConnectRobot"].grid(row=row,column=0,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "connect_robot" not in self.supported_commands:
+            self.button["ConnectRobot"].grid_remove()
 
         self.button["ConnectMQTT"] = tk.Button(self.root, text="ConnectMQTT", padx=5,
                              command=self.ConnectMQTT, state="normal")
         self.button["ConnectMQTT"].grid(row=row,column=2,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "connect_mqtt" not in self.supported_commands:
+            self.button["ConnectMQTT"].grid_remove()
 
         self.button["DemoPutDownBox"] = tk.Button(self.root, text="DemoPutDownBox", padx=5,
                        command=self.DemoPutDownBox, state="disabled")
         self.button["DemoPutDownBox"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
-        self.button["DemoPutDownBox"].grid_remove()
+        if "demo_put_down_box" not in self.supported_commands:
+            self.button["DemoPutDownBox"].grid_remove()
         
+        # NOTE: 現在未使用
         self.button["DisconnectMQTT"] = tk.Button(self.root, text="DisconnectMQTT", padx=5,
                        command=self.DisconnectMQTT, state="disabled")
         # self.button["DisconnectMQTT"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
@@ -151,7 +164,8 @@ class MQTTWin:
                       command=self.ToolChange, state="disabled")
         self.button["ToolChange"].grid(
             row=row,column=6,padx=2,pady=2,sticky="ew", columnspan=2)
-        self.button["ToolChange"].grid_remove()
+        if "tool_change" not in self.supported_commands:
+            self.button["ToolChange"].grid_remove()
 
         self.frame_is_emergency_stopped = tk.Frame(self.root)
         self.frame_is_emergency_stopped.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
@@ -169,20 +183,27 @@ class MQTTWin:
         self.button["EnableRobot"] = tk.Button(self.root, text="EnableRobot", padx=5,
                       command=self.EnableRobot, state="disabled")
         self.button["EnableRobot"].grid(row=row,column=0,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "enable" not in self.supported_commands:
+            self.button["EnableRobot"].grid_remove()
 
         self.button["DisableRobot"] = tk.Button(self.root, text="DisableRobot", padx=5,
                       command=self.DisableRobot, state="disabled")
         self.button["DisableRobot"].grid(row=row,column=2,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "disable" not in self.supported_commands:
+            self.button["DisableRobot"].grid_remove()
 
         self.button["ReleaseHand"] = tk.Button(self.root, text="ReleaseHand", padx=5,
                       command=self.ReleaseHand, state="disabled")
         self.button["ReleaseHand"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "release_hand" not in self.supported_commands:
+            self.button["ReleaseHand"].grid_remove()
 
         self.button["LineCut"] = tk.Button(self.root, text="LineCut", padx=5,
                       command=self.LineCut, state="disabled")
         self.button["LineCut"].grid(row=row,column=6,padx=2,pady=2,sticky="ew", columnspan=2)
-        self.button["LineCut"].grid_remove()
-
+        if "line_cut" not in self.supported_commands:
+            self.button["LineCut"].grid_remove()
+    
         self.frame_enabled = tk.Frame(self.root)
         self.frame_enabled.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
         self.canvas_enabled = \
@@ -199,16 +220,20 @@ class MQTTWin:
         self.button["SetAreaEnabled"] = tk.Button(self.root, text="SetAreaEnabled", padx=5,
                       command=self.SetArea, state="disabled")
         self.button["SetAreaEnabled"].grid(row=row,column=0,padx=2,pady=2,sticky="ew", columnspan=2)
-        self.button["SetAreaEnabled"].grid_remove()
+        if "set_area_enabled" not in self.supported_commands:
+            self.button["SetAreaEnabled"].grid_remove()
 
         self.button["TidyPose"] = tk.Button(self.root, text="TidyPose", padx=5,
                       command=self.TidyPose, state="disabled")
         self.button["TidyPose"].grid(row=row,column=2,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "tidy_pose" not in self.supported_commands:
+            self.button["TidyPose"].grid_remove()
 
         self.button["ClearError"] = tk.Button(self.root, text="ClearError", padx=5,
                       command=self.ClearError, state="disabled")
         self.button["ClearError"].grid(row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)
-        self.button["ClearError"].grid_remove()
+        if "clear_error" not in self.supported_commands:
+            self.button["ClearError"].grid_remove()
 
         self.frame_error = tk.Frame(self.root)
         self.frame_error.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
@@ -227,16 +252,22 @@ class MQTTWin:
                       command=self.StartMQTTControl, state="disabled")
         self.button["StartMQTTControl"].grid(
             row=row,column=0,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "start_mqtt_control" not in self.supported_commands:
+            self.button["StartMQTTControl"].grid_remove()
         
         self.button["StopMQTTControl"] = tk.Button(self.root, text="StopMQTTControl", padx=5,
                       command=self.StopMQTTControl, state="disabled")
         self.button["StopMQTTControl"].grid(
             row=row,column=2,padx=2,pady=2,sticky="ew", columnspan=2)
+        if "stop_mqtt_control" not in self.supported_commands:
+            self.button["StopMQTTControl"].grid_remove()
 
         self.button["ChangeLogFile"] = tk.Button(self.root, text="ChangeLogFile", padx=5,
                     command=self.ChangeLogFile, state="disabled")
         self.button["ChangeLogFile"].grid(
             row=row,column=4,padx=2,pady=2,sticky="ew", columnspan=2)        
+        if "change_log_file" not in self.supported_commands:
+            self.button["ChangeLogFile"].grid_remove()
 
         self.frame_mqtt_control = tk.Frame(self.root)
         self.frame_mqtt_control.grid(row=row,column=8,padx=2,pady=2,sticky="w", columnspan=2)
@@ -574,6 +605,8 @@ class MQTTWin:
         self.logger.setLevel(logging.INFO)
 
     def ConnectRobot(self):
+        if "connect_robot" not in self.supported_commands:
+            return
         if self.pm.state_control and self.pm.state_monitor:
             return
         self.pm.startControl(logging_dir=self.logging_dir)
@@ -602,6 +635,8 @@ class MQTTWin:
             self.button["StopMQTTControl"].config(state="normal")
 
     def ConnectMQTT(self):
+        if "connect_mqtt" not in self.supported_commands:
+            return
         if self.pm.state_recv_mqtt:
             return
         self.pm.startRecvMQTT()
@@ -658,16 +693,22 @@ class MQTTWin:
         threading.Thread(target=_target).start()
 
     def EnableRobot(self):
+        if "enable" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.enable)
 
     def DisableRobot(self):
+        if "disable" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.disable)
 
     def SetArea(self):
+        if "set_area_enabled" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         popup = SetAreaPopup(self.root)
@@ -677,16 +718,22 @@ class MQTTWin:
         self._exclusive_button_action(lambda: self.pm.set_area_enabled(enabled))
 
     def TidyPose(self):
+        if "tidy_pose" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.tidy_pose)
 
     def ClearError(self):
+        if "clear_error" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.clear_error)
 
     def StartMQTTControl(self):
+        if "start_mqtt_control" not in self.supported_commands:
+            return
         if ((not self.pm.state_control) or
             (not self.pm.state_monitor) or
             (not self.pm.state_recv_mqtt)):
@@ -694,6 +741,8 @@ class MQTTWin:
         self._exclusive_button_action(self.pm.start_mqtt_control)
 
     def StopMQTTControl(self):
+        if "stop_mqtt_control" not in self.supported_commands:
+            return
         if ((not self.pm.state_control) or
             (not self.pm.state_monitor) or
             (not self.pm.state_recv_mqtt)):
@@ -701,16 +750,22 @@ class MQTTWin:
         self._exclusive_button_action( self.pm.stop_mqtt_control)
 
     def ReleaseHand(self):
+        if "release_hand" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.release_hand)
     
     def LineCut(self):
+        if "line_cut" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.line_cut)
 
     def ToolChange(self):
+        if "tool_change" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         popup = ToolChangePopup(self.root)
@@ -720,11 +775,15 @@ class MQTTWin:
         self._exclusive_button_action(lambda: self.pm.tool_change(tool_id))
 
     def jog_joint(self, joint, direction):
+        if "jog_joint" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self.pm.jog_joint(joint, direction)
 
     def jog_tcp(self, axis, direction):
+        if "jog_tcp" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self.pm.jog_tcp(axis, direction)
@@ -738,14 +797,18 @@ class MQTTWin:
         self.jog_tcp(axis, direction * step)
 
     def DemoPutDownBox(self):
+        if "demo_put_down_box" not in self.supported_commands:
+            return
         if not self.pm.state_control:
             return
         self._exclusive_button_action(self.pm.demo_put_down_box)
 
     def DisconnectMQTT(self):
-        print("Disconnect MQTT!!")
+        raise NotImplementedError
 
     def ChangeLogFile(self):
+        if "change_log_file" not in self.supported_commands:
+            return
         if getattr(self, "listener", None) is not None:
             self.listener.stop()
         logging_dir = self.get_logging_dir()

@@ -15,7 +15,12 @@ from typing import Optional
 from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
-from .config import ROBOT_MODEL, ROBOT_VENDOR
+from .config import (
+    ROBOT_MODEL,
+    ROBOT_VENDOR,
+    SUPPORTED_COMMANDS_API_ONLY,
+    SUPPORTED_COMMANDS_COMMON,
+)
 from .doosan_mqtt_control import ProcessManager
 from .log import MicrosecondFormatter
 
@@ -23,8 +28,8 @@ from .log import MicrosecondFormatter
 class HeadlessLoop:
     """Headlessモード (GUIなし) でのMQTTコマンド制御ループ"""
 
-    # MQTTによる指令がサポートされるコマンド
-    SUPPORTED_COMMANDS = {
+    # NOTE: この説明をGUIと共有できないか
+    COMMANDS = {
         "enable": {"params": [], "description": "アームを移動させるための電源をONにする"},
         "disable": {"params": [], "description": "アームを移動させるための電源をOFFにする"},
         "tidy_pose": {"params": [], "description": "ロボットを待機姿勢に移動する"},
@@ -50,14 +55,14 @@ class HeadlessLoop:
             "description": "ジョイントの数と名前を取得する"
         },
         # 起動時に自動的に実行するため公開しない
-        # "connect_robot": {"params": [], "description": "ロボット接続"},
-        # "connect_mqtt": {"params": [], "description": "MQTT接続"},
+        "connect_robot": {"params": [], "description": "ロボット接続"},
+        "connect_mqtt": {"params": [], "description": "MQTT接続"},
         # 本ロボットでは使用しないので公開しない
-        # "clear_error": {"params": [], "description": "エラークリア"},
-        # "demo_put_down_box": {"params": [], "description": "デモ実行"},
-        # "line_cut": {"params": [], "description": "カッター移動"},
-        # "tool_change": {"params": ["tool_id"], "description": "ツール交換"},
-        # "set_area_enabled": {"params": ["enabled"], "description": "エリア設定"},
+        "clear_error": {"params": [], "description": "エラークリア"},
+        "demo_put_down_box": {"params": [], "description": "デモ実行"},
+        "line_cut": {"params": [], "description": "カッター移動"},
+        "tool_change": {"params": ["tool_id"], "description": "ツール交換"},
+        "set_area_enabled": {"params": ["enabled"], "description": "エリア設定"},
     }
 
     def __init__(self, **kwargs):
@@ -69,6 +74,9 @@ class HeadlessLoop:
         self.response_client: Optional[mqtt.Client] = None
         self.robot_uuid: Optional[str] = None
         self.mqtt_server: Optional[str] = None
+        self.supported_commands = (
+            SUPPORTED_COMMANDS_COMMON + SUPPORTED_COMMANDS_API_ONLY
+        )
 
     def _setup_response_mqtt(self) -> None:
         """MQTTレスポンス用クライアントを初期化"""
@@ -144,8 +152,8 @@ class HeadlessLoop:
         command_name = cmd.get("command")
 
         # 公開コマンドかチェック
-        if command_name not in self.SUPPORTED_COMMANDS:
-            self.logger.warning(f"Unknown command: {command_name}")
+        if command_name not in self.supported_commands:
+            self.logger.warning(f"Unsupported command: {command_name}")
             return
 
         self.logger.info(f"Executing command: {command_name}")
@@ -354,7 +362,7 @@ class HeadlessLoop:
             command="get_command_list",
             status=True,
             message="",
-            result={"supported_commands": self.SUPPORTED_COMMANDS}
+            result={"supported_commands": self.supported_commands}
         )
 
     def _cmd_get_joint_names(self):
