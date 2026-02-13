@@ -12,9 +12,9 @@ from typing import Optional
 
 import numpy as np
 
-from doosan.doosan_mqtt_control import ProcessManager
-from doosan.config import SHM_NAME, SHM_SIZE
-from doosan.doosan_tools import tool_infos
+from common.doosan_mqtt_control import ProcessManager
+from common.config import SHM_NAME, SHM_SIZE
+from common.doosan_tools import tool_infos
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]

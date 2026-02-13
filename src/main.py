@@ -17,7 +17,7 @@ if __name__ == '__main__':
     # ファイルの情報が正確かいまのところ保証できないので、指定してもらうことにしている
     # 管理する方法が確立されたら変更される可能性あり
     # ツールが1つの場合は1、2つ以上の場合はコマンドラインでの指定が必須
-    from doosan.doosan_tools import tool_infos
+    from common.doosan_tools import tool_infos
     parser.add_argument(
         "--tool-id",
         type=int,
@@ -47,13 +47,13 @@ if __name__ == '__main__':
 
     if kwargs.pop("gui"):   
         import tkinter as tk
-        from doosan.gui import MQTTWin
+        from common.gui import MQTTWin
         root = tk.Tk()
         mqwin = MQTTWin(root, **kwargs)
         mqwin.root.lift()
         root.protocol("WM_DELETE_WINDOW", mqwin.on_closing)
         root.mainloop()
     else:
-        from doosan.headless import HeadlessLoop
+        from common.headless import HeadlessLoop
         headless_loop = HeadlessLoop(**kwargs)
         headless_loop.mainloop()
