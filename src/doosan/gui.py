@@ -11,11 +11,11 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import List, Optional
 
-from doosan.config import ROBOT_NAME
-from doosan.doosan_mqtt_control import ProcessManager
-from doosan.doosan_tools import tool_infos
-from doosan.log import MicrosecondFormatter
-from doosan.utils import rad2deg_list
+from .config import ROBOT_NAME
+from .doosan_mqtt_control import ProcessManager
+from .doosan_tools import tool_infos
+from .log import MicrosecondFormatter
+from .utils import rad2deg_list
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
