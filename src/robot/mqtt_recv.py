@@ -30,7 +30,6 @@ ROBOT_MODEL = os.getenv("ROBOT_MODEL","ur-real")
 MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "mgr")
 MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "dev")+"/"+ROBOT_UUID
 MQTT_COMMAND_TOPIC = os.getenv("MQTT_COMMAND_TOPIC", "dev") + "/" + ROBOT_UUID + "/command"
-MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
 
 
 class MQTT_Recv:
@@ -42,36 +41,30 @@ class MQTT_Recv:
     def on_connect(self, client, userdata, connect_flags, reason_code, properties):
         # ロボットのメタ情報の中身はとりあえず
         date = datetime.now().strftime('%c')
-        if MQTT_MODE == "metawork":
-            info = {
-                "date": date,
-                "device": {
-                    "agent": "none",
-                    "cookie": "none",
-                },
-                "devType": "robot",
-                "type": ROBOT_MODEL,
-                "version": "none",
-                "devId": ROBOT_UUID,
-            }
-            self.client.publish(MQTT_MANAGE_TOPIC + "/register", json.dumps(info))
-            with self.mqtt_control_lock:
-                info["topic_type"] = "mgr/register"
-                info["topic"] = MQTT_MANAGE_TOPIC + "/register"
-                self.mqtt_control_dict.clear()
-                self.mqtt_control_dict.update(info)
-            self.logger.info("publish to: " + MQTT_MANAGE_TOPIC + "/register")
-            self.last_registered = time.time()
-            self.client.subscribe(MQTT_MANAGE_RCV_TOPIC)
-            self.logger.info("subscribe to: " + MQTT_MANAGE_RCV_TOPIC)
-            # コマンドトピックの購読
-            self.client.subscribe(MQTT_COMMAND_TOPIC)
-            self.logger.info("subscribe to: " + MQTT_COMMAND_TOPIC)
-        else:
-            self.logger.info("MQTT:Connected with result code " + str(rc),
-                             "subscribe ctrl", MQTT_CTRL_TOPIC)
-            self.mqtt_ctrl_topic = MQTT_CTRL_TOPIC
-            self.client.subscribe(self.mqtt_ctrl_topic)
+        info = {
+            "date": date,
+            "device": {
+                "agent": "none",
+                "cookie": "none",
+            },
+            "devType": "robot",
+            "type": ROBOT_MODEL,
+            "version": "none",
+            "devId": ROBOT_UUID,
+        }
+        self.client.publish(MQTT_MANAGE_TOPIC + "/register", json.dumps(info))
+        with self.mqtt_control_lock:
+            info["topic_type"] = "mgr/register"
+            info["topic"] = MQTT_MANAGE_TOPIC + "/register"
+            self.mqtt_control_dict.clear()
+            self.mqtt_control_dict.update(info)
+        self.logger.info("publish to: " + MQTT_MANAGE_TOPIC + "/register")
+        self.last_registered = time.time()
+        self.client.subscribe(MQTT_MANAGE_RCV_TOPIC)
+        self.logger.info("subscribe to: " + MQTT_MANAGE_RCV_TOPIC)
+        # コマンドトピックの購読
+        self.client.subscribe(MQTT_COMMAND_TOPIC)
+        self.logger.info("subscribe to: " + MQTT_COMMAND_TOPIC)
 
     def on_disconnect(
         self,
@@ -129,21 +122,20 @@ class MQTT_Recv:
                 self.mqtt_control_dict.update(js)
 
         elif msg.topic == MQTT_MANAGE_RCV_TOPIC:
-            if MQTT_MODE == "metawork":
-                js = json.loads(msg.payload)
-                goggles_id = js["devId"]
-                mqtt_ctrl_topic = MQTT_CTRL_TOPIC + "/" + goggles_id
-                if mqtt_ctrl_topic != self.mqtt_ctrl_topic:
-                    if self.mqtt_ctrl_topic is not None:
-                        self.client.unsubscribe(self.mqtt_ctrl_topic)    
-                    self.mqtt_ctrl_topic = mqtt_ctrl_topic
-                self.client.subscribe(self.mqtt_ctrl_topic)
-                self.logger.info("subscribe to: " + self.mqtt_ctrl_topic)
-                with self.mqtt_control_lock:
-                    js["topic_type"] = "dev"
-                    js["topic"] = msg.topic
-                    self.mqtt_control_dict.clear()
-                    self.mqtt_control_dict.update(js)
+            js = json.loads(msg.payload)
+            goggles_id = js["devId"]
+            mqtt_ctrl_topic = MQTT_CTRL_TOPIC + "/" + goggles_id
+            if mqtt_ctrl_topic != self.mqtt_ctrl_topic:
+                if self.mqtt_ctrl_topic is not None:
+                    self.client.unsubscribe(self.mqtt_ctrl_topic)    
+                self.mqtt_ctrl_topic = mqtt_ctrl_topic
+            self.client.subscribe(self.mqtt_ctrl_topic)
+            self.logger.info("subscribe to: " + self.mqtt_ctrl_topic)
+            with self.mqtt_control_lock:
+                js["topic_type"] = "dev"
+                js["topic"] = msg.topic
+                self.mqtt_control_dict.clear()
+                self.mqtt_control_dict.update(js)
         else:
             self.logger.warning("not subscribe msg" + msg.topic)
 
@@ -198,37 +190,35 @@ class MQTT_Recv:
             if (self.last_registered is not None and 
                 self.last_registered + 60 * 30 < now):
                 date = datetime.now().strftime('%c')
-                if MQTT_MODE == "metawork":
-                    info = {
-                        "date": date,
-                        "device": {
-                            "agent": "none",
-                            "cookie": "none",
-                        },
-                        "devType": "robot",
-                        "type": ROBOT_MODEL,
-                        "version": "none",
-                        "devId": ROBOT_UUID,
-                    }
-                    self.client.publish(
-                        MQTT_MANAGE_TOPIC + "/register", json.dumps(info))
-                    with self.mqtt_control_lock:
-                        info["topic_type"] = "mgr/register"
-                        info["topic"] = MQTT_MANAGE_TOPIC + "/register"
-                        self.mqtt_control_dict.clear()
-                        self.mqtt_control_dict.update(info)
-                    self.logger.info(
-                        "re-publish to: " + MQTT_MANAGE_TOPIC + "/register")
-                    self.last_registered = now
+                info = {
+                    "date": date,
+                    "device": {
+                        "agent": "none",
+                        "cookie": "none",
+                    },
+                    "devType": "robot",
+                    "type": ROBOT_MODEL,
+                    "version": "none",
+                    "devId": ROBOT_UUID,
+                }
+                self.client.publish(
+                    MQTT_MANAGE_TOPIC + "/register", json.dumps(info))
+                with self.mqtt_control_lock:
+                    info["topic_type"] = "mgr/register"
+                    info["topic"] = MQTT_MANAGE_TOPIC + "/register"
+                    self.mqtt_control_dict.clear()
+                    self.mqtt_control_dict.update(info)
+                self.logger.info(
+                    "re-publish to: " + MQTT_MANAGE_TOPIC + "/register")
+                self.last_registered = now
 
             # プロセス終了時
             if self.pose[32] == 1:
-                if MQTT_MODE == "metawork":
-                    info = {"devId": ROBOT_UUID}
-                    self.client.publish(
-                        MQTT_MANAGE_TOPIC + "/unregister", json.dumps(info))
-                    self.logger.info(
-                        "publish to: " + MQTT_MANAGE_TOPIC + "/unregister")
+                info = {"devId": ROBOT_UUID}
+                self.client.publish(
+                    MQTT_MANAGE_TOPIC + "/unregister", json.dumps(info))
+                self.logger.info(
+                    "publish to: " + MQTT_MANAGE_TOPIC + "/unregister")
                 self.client.loop_stop()
                 self.client.disconnect()
                 self.sm.close()
