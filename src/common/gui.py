@@ -878,10 +878,10 @@ class MQTTWin:
 
     def update_monitor(self):
         # モニタープロセスからの情報
-        log = self.pm.get_current_monitor_log()
+        topic_type = "robot"
+        log = self.pm.topic_memory.read(topic_type)
         if log:
             # ロボットの姿勢情報が流れるトピック
-            topic_type = log.pop("topic_type")
             topic = log.pop("topic")
             poses = log.pop("poses", None)
             log_str = json.dumps(log, ensure_ascii=False)
@@ -918,27 +918,27 @@ class MQTTWin:
                     self.string_var_states_tcp[i].set(f"{poses[i]:.2f}")
 
         # MQTT制御プロセスからの情報
-        log = self.pm.get_current_mqtt_control_log()
-        if log:
-            topic_type = log.pop("topic_type")
-            topic = log.pop("topic")
-            log_str = json.dumps(log, ensure_ascii=False)
-            self.string_var_topics[topic_type].set(topic)
-            self.update_topic(log_str, self.topic_monitors[topic_type])
+        for topic_type in ["mgr/register", "dev", "control"]:
+            log = self.pm.topic_memory.read(topic_type)
+            if log:
+                topic = log.pop("topic")
+                log_str = json.dumps(log, ensure_ascii=False)
+                self.string_var_topics[topic_type].set(topic)
+                self.update_topic(log_str, self.topic_monitors[topic_type])
 
-            joints = log.get("joints")
-            if joints is not None:
-                joints = self.vr_to_real_joint(joints)
-                for i in range(6):
-                    self.string_var_targets[f"J{i + 1}"].set(f"{joints[i]:.2f}")
-            else:
-                for i in range(6):
-                    self.string_var_targets[f"J{i + 1}"].set("")
-            grip = log.get("grip")
-            if grip is not None:
-                self.string_var_targets["grip"].set(f"{grip}")
-            else:
-                self.string_var_targets["grip"].set("")
+                joints = log.get("joints")
+                if joints is not None:
+                    joints = self.vr_to_real_joint(joints)
+                    for i in range(6):
+                        self.string_var_targets[f"J{i + 1}"].set(f"{joints[i]:.2f}")
+                else:
+                    for i in range(6):
+                        self.string_var_targets[f"J{i + 1}"].set("")
+                grip = log.get("grip")
+                if grip is not None:
+                    self.string_var_targets["grip"].set(f"{grip}")
+                else:
+                    self.string_var_targets["grip"].set("")
         
         # 共有メモリの情報
         sm = self.pm.ar.copy()

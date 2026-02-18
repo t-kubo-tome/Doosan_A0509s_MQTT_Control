@@ -137,11 +137,8 @@ class Doosan_MON:
                 if self.client is not None:
                     jss = json.dumps(actual_joint_js)
                     self.client.publish(MQTT_ROBOT_STATE_TOPIC, jss)
-                    actual_joint_js["topic_type"] = "robot"
                     actual_joint_js["topic"] = MQTT_ROBOT_STATE_TOPIC
-                with self.monitor_lock:
-                    self.monitor_dict.clear()
-                    self.monitor_dict.update(actual_joint_js)
+                self.topic_memory.write("robot", actual_joint_js)
                 last = now
 
             # MQTT手動制御モード時のみ記録する
@@ -191,13 +188,12 @@ class Doosan_MON:
         self.logging_dir = logging_dir
         self.pose[34] = 0
 
-    def run_proc(self, monitor_dict, monitor_lock, slave_mode_lock, log_queue, monitor_pipe, monitor_queue, logging_dir, disable_mqtt: bool = False):
+    def run_proc(self, topic_memory, slave_mode_lock, log_queue, monitor_pipe, monitor_queue, logging_dir, disable_mqtt: bool = False):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
         self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
-        self.monitor_dict = monitor_dict
-        self.monitor_lock = monitor_lock
+        self.topic_memory = topic_memory
         self.slave_mode_lock = slave_mode_lock
         self.monitor_pipe = monitor_pipe
         self.monitor_queue = monitor_queue

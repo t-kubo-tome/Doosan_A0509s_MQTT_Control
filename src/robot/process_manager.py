@@ -3,6 +3,8 @@
 import multiprocessing
 import multiprocessing.shared_memory
 from multiprocessing import Process
+from multiprocessing.managers import DictProxy, SyncManager
+import threading
 
 import numpy as np
 
@@ -11,6 +13,44 @@ from .doosan_control import Doosan_CON, Doosan_CON_Archiver
 from .doosan_monitor import Doosan_MON
 from ..common.monitor_gui import run_joint_monitor_gui
 from .mqtt_recv import MQTT_Recv
+
+
+class TopicMemory:
+    """
+    トピックのプロセス間共有メモリ
+    トピックの種類（実際のトピック名とは違っても良い）は事前に固定する必要がある
+    """
+    def __init__(self, manager: SyncManager, topic_types: list[str]) -> None:
+        # Manager経由のプロキシオブジェクトなのでコピーしても同じ共有メモリを指す
+        self._store: DictProxy = manager.dict()
+        self._locks: dict[str, threading.Lock] = {
+            topic: manager.Lock() for topic in topic_types
+        }
+        for topic in topic_types:
+            self._store[topic] = {}
+
+    def write(self, topic_type: str, data: dict) -> None:
+        """指定したトピックの種類にデータを書き込む(Lock付き)"""
+        if topic_type not in self._locks:
+            raise KeyError(f"未登録のトピックの種類: {topic_type}")
+        with self._locks[topic_type]:
+            self._store[topic_type] = data
+
+    def read(self, topic_type: str) -> dict:
+        """指定したトピックの種類のデータを読み取る(Lock付き)"""
+        if topic_type not in self._locks:
+            raise KeyError(f"未登録のトピックの種類: {topic_type}")
+        with self._locks[topic_type]:
+            # コピーを返す
+            return dict(self._store[topic_type])
+
+    def read_all(self) -> dict:
+        """全トピックの種類のスナップショットを取得"""
+        return {topic_type: self.read(topic_type) for topic_type in self._locks}
+
+    def topic_types(self) -> list[str]:
+        """全トピックの種類を取得"""
+        return list(self._locks.keys())
 
 
 class ProcessManager:
@@ -53,10 +93,8 @@ class ProcessManager:
         self.ar = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf) # 共有メモリ上の Array
         self.ar[:] = 0
         self.manager = multiprocessing.Manager()
-        self.monitor_dict = self.manager.dict()
-        self.monitor_lock = self.manager.Lock()
-        self.mqtt_control_dict = self.manager.dict()
-        self.mqtt_control_lock = self.manager.Lock()
+        topic_types = ["mgr/register", "dev", "robot", "control"]
+        self.topic_memory = TopicMemory(self.manager, topic_types=topic_types)
         self.slave_mode_lock = multiprocessing.Lock()
         self.main_to_control_pipe, self.control_pipe = multiprocessing.Pipe()
         self.main_to_monitor_pipe, self.monitor_pipe = multiprocessing.Pipe()
@@ -80,8 +118,7 @@ class ProcessManager:
         self.recv = MQTT_Recv()
         self.recvP = Process(
             target=self.recv.run_proc,
-            args=(self.mqtt_control_dict,
-                  self.mqtt_control_lock,
+            args=(self.topic_memory,
                   self.log_queue,
                   self.command_queue),
             name="MQTT-recv")
@@ -92,8 +129,7 @@ class ProcessManager:
         self.mon = Doosan_MON()
         self.monP = Process(
             target=self.mon.run_proc,
-            args=(self.monitor_dict,
-                  self.monitor_lock,
+            args=(self.topic_memory,
                   self.slave_mode_lock,
                   self.log_queue,
                   self.monitor_pipe,

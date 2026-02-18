@@ -82,11 +82,8 @@ class MQTT_Recv:
                 self.client.subscribe(mqtt_ctrl_topic)
                 self.logger.info("subscribe to: " + mqtt_ctrl_topic)
                 # 表示用
-                with self.mqtt_control_lock:
-                    js["topic_type"] = "dev"
-                    js["topic"] = msg.topic
-                    self.mqtt_control_dict.clear()
-                    self.mqtt_control_dict.update(js)
+                js["topic"] = msg.topic
+                self.topic_memory.write("dev", dict(js))
         # ロボットへの連絡用トピックの処理で接続を切り替えた直後に到達することがありうる
         else:
             self.logger.warning("Not subscribing topic: " + msg.topic)
@@ -108,11 +105,8 @@ class MQTT_Recv:
         # マネージャに登録
         self.client.publish(MQTT_MANAGE_TOPIC + "/register", json.dumps(info))
         # 表示用
-        with self.mqtt_control_lock:
-            info["topic_type"] = "mgr/register"
-            info["topic"] = MQTT_MANAGE_TOPIC + "/register"
-            self.mqtt_control_dict.clear()
-            self.mqtt_control_dict.update(info)
+        info["topic"] = MQTT_MANAGE_TOPIC + "/register"
+        self.topic_memory.write("mgr/register", dict(info))
         self.logger.info("publish to: " + MQTT_MANAGE_TOPIC + "/register")
         # 定期的な再登録用に時間を記録
         self.last_registered = now
@@ -151,14 +145,12 @@ class MQTT_Recv:
         self.logger.addHandler(self.handler)
         self.logger.setLevel(logging.INFO)
 
-    def run_proc(self, mqtt_control_dict, mqtt_control_lock, log_queue,
-                 command_queue=None):
+    def run_proc(self, topic_memory, log_queue, command_queue=None):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = multiprocessing.shared_memory.SharedMemory(SHM_NAME)
         self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
-        self.mqtt_control_dict = mqtt_control_dict
-        self.mqtt_control_lock = mqtt_control_lock
+        self.topic_memory = topic_memory
         self.command_queue = command_queue
         self.connect_mqtt()
         while True:
@@ -217,8 +209,5 @@ class MQTT_Recv:
                     self.pose[38] = 1
 
         self.pose[20] = 1
-        with self.mqtt_control_lock:
-            js["topic_type"] = "control"
-            js["topic"] = msg.topic
-            self.mqtt_control_dict.clear()
-            self.mqtt_control_dict.update(js)
+        js["topic"] = msg.topic
+        self.topic_memory.write("control", dict(js))
