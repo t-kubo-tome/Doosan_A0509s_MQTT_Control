@@ -225,16 +225,6 @@ class ProcessManager:
     def state_mqtt_control(self):
         return self.ar[15] == 1
 
-    def get_current_monitor_log(self):
-        with self.monitor_lock:
-            monitor_dict = self.monitor_dict.copy()
-        return monitor_dict
-
-    def get_current_mqtt_control_log(self):
-        with self.mqtt_control_lock:
-            mqtt_control_dict = self.mqtt_control_dict.copy()
-        return mqtt_control_dict
-
     # MQTT制御コマンド群
     def enable(self):
         return self._send_command_to_control({"command": "enable", "wait": True})
