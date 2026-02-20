@@ -1140,6 +1140,17 @@ class Doosan_CON:
         if self.qb_hand is not None:
             self.qb_hand.setClosure(0, 100, 100)
 
+    def release_hand(self) -> bool:
+        self.logger.info("Release hand")
+        try:
+            if not self.send_release():
+                raise ValueError("Failed to release hand")
+            return True
+        except Exception as e:
+            self.logger.error("Error releasing hand")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
+
     def enable(self) -> bool:
         self.logger.info("Enabling robot")
         try:
@@ -1168,6 +1179,7 @@ class Doosan_CON:
         raise NotImplementedError
 
     def tidy_pose(self) -> bool:
+        self.logger.info("Tidy pose")
         try:
             ret = self.robot.move_joint(*self.tidy_joint)
             if not ret:
@@ -1179,6 +1191,7 @@ class Doosan_CON:
             return False
 
     def move_joint(self, joints: List[float]) -> bool:
+        self.logger.info("Move joint")
         try:
             ret = self.robot.move_joint(*joints)
             if not ret:
@@ -1374,6 +1387,7 @@ class Doosan_CON:
         raise NotImplementedError
 
     def tool_change_not_in_rt(self, tool_id: int) -> bool:
+        self.logger.info("Tool change not in real-time")
         raise NotImplementedError
 
     def jog_joint(self, joint: int, direction: float) -> bool:
@@ -1413,6 +1427,7 @@ class Doosan_CON:
             return False
 
     def demo_put_down_box(self) -> bool:
+        self.logger.info("Demo put down box")
         raise NotImplementedError
 
     def setup_logger(self, log_queue):
@@ -1432,6 +1447,7 @@ class Doosan_CON:
         self.robot_logger.setLevel(logging.INFO)
 
     def line_cut(self) -> bool:
+        self.logger.info("Line cut")
         raise NotImplementedError
 
     def del_robot(self) -> None:
@@ -1462,9 +1478,6 @@ class Doosan_CON:
                 command = command_dict["command"]
                 wait = command_dict.get("wait", False)
                 # MQTTリアルタイム制御中
-                # NOTE: line_cut, tool_change, demo_put_down_boxは、
-                # VRからMQTTリアルタイム制御中でも実行できるため、実装できなくはないが、
-                # コマンドからMQTTリアルタイム制御中で実行するケースはないと想定されるため、実装しない
                 if self.pose[15] == 1:
                     if command["command"] == "stop_mqtt_control":
                         status = self.stop_mqtt_control()
@@ -1483,30 +1496,24 @@ class Doosan_CON:
                 elif command["command"] == "set_area_enabled":
                     status = self.set_area_enabled(**command["params"])
                 elif command["command"] == "tidy_pose":
-                    self.logger.info("Tidy pose")
                     status = self.tidy_pose()
                 elif command["command"] == "release_hand":
-                    self.logger.info("Release hand")
-                    status = self.send_release()
+                    status = self.release_hand()
                 elif command["command"] == "line_cut":
-                    self.logger.info("Line cut not during MQTT control")
                     status = self.line_cut()
                 elif command["command"] == "clear_error":
                     status = self.clear_error()
                 elif command["command"] == "start_mqtt_control":
                     status = self.start_mqtt_control()
                 elif command["command"] == "tool_change":
-                    self.logger.info("Tool change not during MQTT control")
                     status = self.tool_change_not_in_rt(**command["params"])
                 elif command["command"] == "jog_joint":
                     status = self.jog_joint(**command["params"])
                 elif command["command"] == "jog_tcp":
                     status = self.jog_tcp(**command["params"])
                 elif command["command"] == "move_joint":
-                    self.logger.info("Move joint not during MQTT control")
                     status = self.move_joint(**command["params"])
                 elif command["command"] == "demo_put_down_box":
-                    self.logger.info("Demo put down box not during MQTT control")
                     status = self.demo_put_down_box()                
                 else:
                     message = "MQTT control not in progress. Consider starting MQTT control first."
