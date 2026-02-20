@@ -1301,7 +1301,6 @@ class Doosan_CON:
     def mqtt_control_loop(self) -> None:
         """MQTTによる制御ループ"""
         self.logger.info("Start MQTT Control Loop")
-        self.pose[15] = 1
         while True:
             # 停止するのは、ユーザーが要求した場合か、自然に内部エラーが発生した場合
             success_stop = self.control_loop_w_recover_automatic()
@@ -1374,7 +1373,6 @@ class Doosan_CON:
                     # 要求コマンドのみリセット
                     self.pose[33] = 0
                 break
-        self.pose[15] = 0
 
     def get_tool_info(
         self, tool_infos: List[Dict[str, Any]], tool_id: int) -> Dict[str, Any]:
@@ -1516,8 +1514,6 @@ class Doosan_CON:
                     status = self.line_cut()
                 elif command["command"] == "clear_error":
                     status = self.clear_error()
-                elif command["command"] == "start_mqtt_control":
-                    self.start_mqtt_control_loop = True
                 elif command["command"] == "tool_change":
                     self.logger.info("Tool change not during MQTT control")
                     status = self.tool_change_not_in_rt()
@@ -1567,13 +1563,12 @@ class Doosan_CON:
         # リアルタイム性を考慮し、MQTTリアルタイム制御はメインスレッドで行う
         # コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う
         self.init_receive_command_loop()
-        self.start_mqtt_control_loop = False
         # 外のループでMQTTリアルタイム制御の開始とプロセス終了を監視する
         while True:
-            if self.start_mqtt_control_loop:
-                self.start_mqtt_control_loop = False
+            if self.pose[15] == 1:
                 # 内のループでMQTTリアルタイム制御を行う
                 self.mqtt_control_loop()
+                self.pose[15] = 0
             if self.pose[32] == 1:
                 self.del_robot()
                 self.del_robot_log()

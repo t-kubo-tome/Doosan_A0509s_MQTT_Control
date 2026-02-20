@@ -259,7 +259,12 @@ class ProcessManager:
         return self._send_command_to_control({"command": "line_cut", "wait": True})
 
     def start_mqtt_control(self):
-        return self._send_command_to_control({"command": "start_mqtt_control", "wait": True})
+        if not self.state_mqtt_control:
+            self.ar[15] = 1
+            status = True
+        else:
+            status = False
+        return {"command": "start_mqtt_control", "status": status, "message": "", "result": {}}
 
     def stop_mqtt_control(self):
         # mqtt_control中のみシグナルを出す
