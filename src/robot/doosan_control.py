@@ -1457,27 +1457,44 @@ class Doosan_CON:
         self.robot.disable()
         self.robot.stop()
 
+    def start_mqtt_control(self) -> bool:
+        self.logger.info("Start MQTT control")
+        self.pose[15] = 1
+        return True
+
+    def stop_mqtt_control(self) -> bool:
+        self.logger.info("Stop MQTT control")
+        self.pose[16] = 1
+        while self.pose[15] != 0:
+            time.sleep(0.1)
+        return True
+
     def receive_command_loop(self) -> None:
         """コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う"""
         while True:
             if self.control_pipe.poll(timeout=1):
                 command_dict = self.control_pipe.recv()
                 status = False
+                message = ""
                 # NOTE: 現在未使用
                 result = {}
                 command = command_dict["command"]
                 wait = command_dict.get("wait", False)
-                # MQTTリアルタイム制御中は他のコマンドを受け付けず失敗をすぐに返す
-                # NOTE: line_cut, tool_change, demo_put_down_box, change_log_fileは
+                # MQTTリアルタイム制御中
+                # NOTE: line_cut, tool_change, demo_put_down_boxは、
                 # VRからMQTTリアルタイム制御中でも実行できるため、実装できなくはないが、
                 # コマンドからMQTTリアルタイム制御中で実行するケースはないと想定されるため、実装しない
                 if self.pose[15] == 1:
-                    message = "MQTT control in progress. Consider stopping MQTT control first."
+                    if command["command"] == "stop_mqtt_control":
+                        status = self.stop_mqtt_control()
+                    # 他のコマンドは受け付けず失敗をすぐに返す
+                    else:
+                        message = "MQTT control in progress. Consider stopping MQTT control first."
                     if wait:
                         self.control_pipe.send(
                             {"command": command, "status": status, "message": message, "result": result})
                     continue
-                # MQTTリアルタイム制御中でなければ通常のコマンド処理を行う
+                # MQTTリアルタイム制御外
                 if command["command"] == "enable":
                     status = self.enable()
                 elif command["command"] == "disable":
@@ -1495,6 +1512,8 @@ class Doosan_CON:
                     status = self.line_cut()
                 elif command["command"] == "clear_error":
                     status = self.clear_error()
+                elif command["command"] == "start_mqtt_control":
+                    status = self.start_mqtt_control()
                 elif command["command"] == "tool_change":
                     self.logger.info("Tool change not during MQTT control")
                     status = self.tool_change_not_in_rt()
@@ -1509,11 +1528,9 @@ class Doosan_CON:
                     self.logger.info("Demo put down box not during MQTT control")
                     status = self.demo_put_down_box()                
                 else:
-                    self.logger.warning(
-                        f"Unknown command: {command['command']}")
+                    message = "MQTT control not in progress. Consider starting MQTT control first."
                 if wait:
-                    message = ""
-                    self.control_pipe.send({"command": command, "status": status, "message": message, "result": result})
+                     self.control_pipe.send({"command": command, "status": status, "message": message, "result": result})
 
     def init_receive_command_loop(self):
         self.receive_command_thread = threading.Thread(
