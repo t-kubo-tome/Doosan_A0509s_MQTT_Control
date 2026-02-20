@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 # Robot shared modules
 from ..common.filter import SMAFilter
 from ..common.interpolate import DelayedInterpolator
-from ..common.utils import deg2rad_list
+from ..common.utils import deg2rad_list, StopWatch
 
 # Robot specific modules
 from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
@@ -104,49 +104,6 @@ use_first_speed_limit = True
 use_second_speed_limit = True
 control_interface: Literal["position", "velocity"] = "velocity"
 save_control = SAVE
-
-
-class StopWatch:
-    def __init__(self):
-        self.start_t = None
-        self.last_t = None
-        self.last_msg = None
-        self.laps = []
-
-    def start(self, msg: str = "") -> None:
-        t = time.perf_counter()
-        self.start_t = t
-        self.last_t = t
-        self.last_msg = msg
-        self.laps = []
-
-    def lap(self, msg: str = "") -> None:
-        if ((self.start_t is None) or
-            (self.last_t is None) or
-            (self.last_msg is None)):
-            raise RuntimeError("StopWatch has not been started.")
-        t = time.perf_counter()
-        self.laps.append({
-            "msg": self.last_msg,
-            "lap": t - self.last_t,
-            "split": t - self.start_t,
-        })
-        self.last_t = t
-        self.last_msg = msg
-
-    def stop(self) -> None:
-        self.lap()
-        self.start_t = None
-        self.last_t = None
-        self.last_msg = None
-    
-    def summary(self) -> str:
-        s = "StopWatch summary:\n"
-        s += "| No. | Lap (ms) | Split (ms) | Message |\n"
-        s += "| - | - | - | - |\n"
-        for i, lap in enumerate(self.laps):
-            s += f"| {i} | {lap['lap']*1000:.3f} | {lap['split']*1000:.3f} | {lap['msg']} |\n"
-        return s
 
 
 class Doosan_CON:
