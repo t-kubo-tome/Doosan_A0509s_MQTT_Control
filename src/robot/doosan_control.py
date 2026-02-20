@@ -112,6 +112,7 @@ class Doosan_CON:
         self.tidy_joint = default_joints["tidy"]
         self.robot: DoosanRobot | None = None
         self.qb_hand: qbSoftHandIndustryAPI | None = None
+        self.all_robot_state = {}
 
     def init_robot(self):
         # ロボット固有の処理を含む
@@ -178,6 +179,43 @@ class Doosan_CON:
     def real_to_vr_joint(self, joints: List[float]) -> List[float]:
         return deg2rad_list(joints)
 
+    def get_current_pose_rt(self) -> List[float]:
+        return self.robot.get_current_pose_rt()[1:]
+
+    def get_current_joint_rt(self) -> List[float]:
+        return self.robot.get_current_joint_rt()[1:]
+    
+    def get_current_force_rt(self) -> List[float]:
+        return self.robot.get_current_external_tcp_force_rt()[1:]
+
+    def get_all_robot_state_at_once(self) -> None:
+        self.all_robot_state["robot_state"] = self.robot.get_robot_state()
+
+    def get_enabled(self) -> bool:
+        robot_state = self.all_robot_state["robot_state"]
+        return robot_state in [
+            ROBOT_STATE.STATE_STANDBY,
+            ROBOT_STATE.STATE_MOVING,
+            ROBOT_STATE.STATE_TEACHING,
+            ROBOT_STATE.STATE_HOMMING,
+        ]
+
+    def get_is_in_servo_mode(self) -> bool:
+        return bool(self.pose[14])
+    
+    def get_is_emergency_stopped(self) -> bool:
+        robot_state = self.all_robot_state["robot_state"]
+        return robot_state == ROBOT_STATE.STATE_EMERGENCY_STOP
+
+    def get_is_normal_mode(self) -> bool:
+        robot_state = self.all_robot_state["robot_state"]
+        return robot_state not in [
+            # ROBOT_STATE.STATE_SAFE_OFF,
+            ROBOT_STATE.STATE_SAFE_STOP,
+            ROBOT_STATE.STATE_SAFE_OFF2,
+            ROBOT_STATE.STATE_SAFE_STOP2,
+        ]
+
     def monitor_loop(self):
         # ロボット固有の処理を含む
         last = 0
@@ -203,13 +241,13 @@ class Doosan_CON:
 
             # TCP姿勢
             try:
-                actual_tcp_pose = self.robot.get_current_pose_rt()[1:]
+                actual_tcp_pose = self.get_current_pose_rt()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
                 actual_tcp_pose = None
             # 関節
             try:
-                actual_joint = self.robot.get_current_joint_rt()[1:]
+                actual_joint = self.get_current_joint_rt()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
                 actual_joint = None
@@ -232,7 +270,7 @@ class Doosan_CON:
 
             # [X, Y, Z, RX, RY, RZ]: センサ値の力[N]とモーメント[Nm]
             try:
-                forces = self.robot.get_current_external_tcp_force_rt()[1:]
+                forces = self.get_current_force_rt()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
                 forces = None
@@ -241,17 +279,16 @@ class Doosan_CON:
 
             # TODO: tool            
 
-            # 1つの関数で複数の情報をまとめて取得
-            robot_state = self.robot.get_robot_state()
+            # 1つの関数で複数の情報をまとめて取得する場合
+            try:
+                self.get_all_robot_state_at_once()
+            except Exception as e:
+                self.logger.error(f"{self.format_error(e)}")
+
             # モーターの電源がONか
             enabled = False
             try:
-                enabled = robot_state in [
-                    ROBOT_STATE.STATE_STANDBY,
-                    ROBOT_STATE.STATE_MOVING,
-                    ROBOT_STATE.STATE_TEACHING,
-                    ROBOT_STATE.STATE_HOMMING,
-                ]
+                enabled = self.get_enabled()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
             if enabled != last_enabled:
@@ -266,7 +303,7 @@ class Doosan_CON:
             is_in_servo_mode = False
             try:
                 # NOTE: Doosanではスレーブモードの状態はAPIでは不明なので制御値を使用
-                is_in_servo_mode = bool(self.pose[14])
+                is_in_servo_mode = self.get_is_in_servo_mode()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
             # 切り替わるときにログを出す
@@ -282,8 +319,7 @@ class Doosan_CON:
             # 緊急停止状態かどうかを取得する
             is_emergency_stopped = False
             try:
-                is_emergency_stopped = \
-                    robot_state == ROBOT_STATE.STATE_EMERGENCY_STOP
+                is_emergency_stopped = self.get_is_emergency_stopped()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
             # 切り替わるときにログを出す
@@ -298,12 +334,7 @@ class Doosan_CON:
 
             error = {}
             try:
-                is_normal_mode = robot_state not in [
-                    # ROBOT_STATE.STATE_SAFE_OFF,
-                    ROBOT_STATE.STATE_SAFE_STOP,
-                    ROBOT_STATE.STATE_SAFE_OFF2,
-                    ROBOT_STATE.STATE_SAFE_STOP2,
-                ]
+                is_normal_mode = self.get_is_normal_mode()
                 if not is_normal_mode:
                     errors = [{"error_code": 0,
                                "error_message": "Robot state is not NORMAL"}]
@@ -317,10 +348,7 @@ class Doosan_CON:
             if error:
                 actual_joint_js["error"] = error
 
-            if self.pose[15] == 0:
-                actual_joint_js["mqtt_control"] = "OFF"
-            else:
-                actual_joint_js["mqtt_control"] = "ON"
+            actual_joint_js["mqtt_control"] = self.pose[15] == 1
 
             self.monitor_queue.put(actual_joint_js)
 
