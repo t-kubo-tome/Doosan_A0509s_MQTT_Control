@@ -1371,29 +1371,10 @@ class Doosan_CON:
                 if tool_info["id"] == tool_id][0]
 
     def tool_change(self, next_tool_id: int) -> None:
-        # TODO: このレベルでtry-exceptしboolを返すべきか
         raise NotImplementedError
 
-    def tool_change_not_in_rt(self) -> bool:
-        ret = False
-        while True:
-            next_tool_id = self.pose[17]
-            if next_tool_id != 0:
-                try:
-                    self.logger.info(f"Tool change to: {next_tool_id}")
-                    self.pose[41] = 0
-                    self.tool_change(next_tool_id)
-                    self.pose[18] = 1
-                    ret = True
-                except Exception as e:
-                    self.logger.error("Error during tool change")
-                    self.logger.error(f"{self.format_error(e)}")
-                    self.pose[18] = 2
-                    ret = False
-                finally:
-                    self.pose[17] = 0
-                    self.pose[41] = 1
-                    return ret
+    def tool_change_not_in_rt(self, tool_id: int) -> bool:
+        raise NotImplementedError
 
     def jog_joint(self, joint: int, direction: float) -> bool:
         try:
@@ -1516,7 +1497,7 @@ class Doosan_CON:
                     status = self.start_mqtt_control()
                 elif command["command"] == "tool_change":
                     self.logger.info("Tool change not during MQTT control")
-                    status = self.tool_change_not_in_rt()
+                    status = self.tool_change_not_in_rt(**command["params"])
                 elif command["command"] == "jog_joint":
                     status = self.jog_joint(**command["params"])
                 elif command["command"] == "jog_tcp":

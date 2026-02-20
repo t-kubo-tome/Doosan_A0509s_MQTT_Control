@@ -264,8 +264,7 @@ class ProcessManager:
         return self._send_command_to_control({"command": "stop_mqtt_control", "wait": True})
 
     def tool_change(self, tool_id: int):
-        self.ar[17] = tool_id
-        return self._send_command_to_control({"command": "tool_change", "wait": True})
+        return self._send_command_to_control({"command": "tool_change", "params": {"tool_id": tool_id}, "wait": True})
 
     def jog_joint(self, joint, direction):
         return self._send_command_to_control({"command": "jog_joint", "params": {"joint": joint, "direction": direction}, "wait": False})
