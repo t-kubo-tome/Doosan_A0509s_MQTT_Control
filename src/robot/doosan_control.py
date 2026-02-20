@@ -1308,7 +1308,6 @@ class Doosan_CON:
             next_tool_id = self.pose[17].copy()
             put_down_box = self.pose[21].copy()
             line_cut = self.pose[38].copy()
-            change_log_file = self.pose[33].copy()
             if success_stop:
                 # ツールチェンジが要求された場合
                 if next_tool_id != 0:
@@ -1343,11 +1342,6 @@ class Doosan_CON:
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
                     self.line_cut()
-                # ログファイルを変更することが要求された場合
-                elif change_log_file != 0:
-                    self.logger.info("User required change log file")
-                    # ログファイルを変更する
-                    self.get_logging_dir_and_change_log_file()
                 # 単なる停止が要求された場合は、ループを抜ける
                 else:
                     break
@@ -1369,9 +1363,6 @@ class Doosan_CON:
                     self.pose[39] = 2
                     self.pose[38] = 0
                 # ループを抜ける
-                elif change_log_file != 0:
-                    # 要求コマンドのみリセット
-                    self.pose[33] = 0
                 break
 
     def get_tool_info(
@@ -1459,16 +1450,6 @@ class Doosan_CON:
         self.robot_logger.addHandler(self.robot_handler)
         self.robot_logger.setLevel(logging.INFO)
 
-    def get_logging_dir_and_change_log_file(self) -> None:
-        command = self.control_pipe.recv()
-        logging_dir = command["params"]["logging_dir"]
-        self.logger.info("Change log file")
-        self.change_log_file(logging_dir)
-
-    def change_log_file(self, logging_dir: str) -> None:
-        self.logging_dir = logging_dir
-        self.pose[33] = 0
-
     def line_cut(self) -> bool:
         raise NotImplementedError
 
@@ -1526,11 +1507,7 @@ class Doosan_CON:
                     status = self.move_joint(**command["params"])
                 elif command["command"] == "demo_put_down_box":
                     self.logger.info("Demo put down box not during MQTT control")
-                    status = self.demo_put_down_box()
-                elif command["command"] == "change_log_file":
-                    # MQTTControl時以外にログファイルを変更する場合に対応
-                    self.logger.info("Change log file")
-                    status = self.change_log_file(**command["params"])
+                    status = self.demo_put_down_box()                
                 else:
                     self.logger.warning(
                         f"Unknown command: {command['command']}")
@@ -1547,14 +1524,13 @@ class Doosan_CON:
         if hasattr(self, 'receive_command_thread'):
             self.receive_command_thread.join()
 
-    def run_proc(self, control_pipe, slave_mode_lock, log_queue, logging_dir, control_to_archiver_queue, monitor_queue):
+    def run_proc(self, control_pipe, slave_mode_lock, log_queue, control_to_archiver_queue, monitor_queue):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
         self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
         self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
         self.slave_mode_lock = slave_mode_lock
         self.control_pipe = control_pipe
-        self.logging_dir = logging_dir
         self.control_to_archiver_queue = control_to_archiver_queue
         self.monitor_queue = monitor_queue
 

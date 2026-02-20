@@ -861,7 +861,6 @@ class MQTTWin:
             self.button["ReleaseHand"].config(state=kind1)
             self.button["TidyPose"].config(state=kind1)
             self.button["ToolChange"].config(state=kind1)
-            self.button["ChangeLogFile"].config(state=kind1)
             self.button["DemoPutDownBox"].config(state=kind1)
             self.button["LineCut"].config(state=kind1)
             for joint in self.button["joint_jog"]:

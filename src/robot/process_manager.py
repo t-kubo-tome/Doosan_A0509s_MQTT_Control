@@ -147,7 +147,6 @@ class ProcessManager:
             args=(self.control_pipe,
                   self.slave_mode_lock,
                   self.log_queue,
-                  logging_dir,
                   self.control_to_archiver_queue,
                   self.monitor_queue,
                 ),
@@ -295,11 +294,6 @@ class ProcessManager:
         # モニタプロセス
         self.ar[34] = 1
         self._send_command_to_monitor({"command": "change_log_file", "params": {"logging_dir": logging_dir}})
-        # 制御プロセス
-        self.ar[33] = 1
-        self._send_command_to_control({"command": "change_log_file", "params": {"logging_dir": logging_dir}, "wait": True})
-        # 制御プロセスはMQTTControl時は一旦停止させる
-        self.stop_mqtt_control()
         # 制御記録用プロセス
         self.ar[35] = 1
         self._send_command_to_control_archiver({"command": "change_log_file", "params": {"logging_dir": logging_dir}})
