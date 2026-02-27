@@ -1,58 +1,21 @@
 # 複数プロセスを管理する
 
 import multiprocessing
-import multiprocessing.shared_memory
 from multiprocessing import Process
 
-import numpy as np
-
-from .config import SHM_NAME, SHM_SIZE, ROBOT_NAME
+from .config import ROBOT_NAME
 from .doosan_control import Doosan_CON, Doosan_CON_Archiver
 from .doosan_monitor import Doosan_MON
 from ..common.monitor_gui import run_joint_monitor_gui
 from ..common.shared_memory import TopicMemory
 from .mqtt_recv import MQTT_Recv
+from .shared_memory import NamedSharedMemory
 
 
 class ProcessManager:
     def __init__(self, use_command_queue: bool = False):
         # mp.set_start_method('spawn')
-        sz = SHM_SIZE * np.dtype('float32').itemsize
-        try:
-            self.sm = multiprocessing.shared_memory.SharedMemory(create=True,size = sz, name=SHM_NAME)
-        except FileExistsError:
-            self.sm = multiprocessing.shared_memory.SharedMemory(size = sz, name=SHM_NAME)
-        # self.arの要素の説明
-        # [0:6]: 関節の状態値
-        # [6:12]: 関節の目標値
-        # [12]: ハンドの状態値
-        # [13]: ハンドの目標値
-        # [14]: 0: 必ず通常モード。1: 基本的にスレーブモード（通常モードになっている場合もある）
-        # [15]: 0: mqtt_control実行中でない。1: mqtt_control実行中
-        # [16]: 1: リアルタイム制御停止命令（mqtt_control停止命令ではないことに注意）
-        # [17]: ツールチェンジの実行フラグ。0: 終了。0以外: 開始。次のツール番号
-        # [18]: ツールチェンジ完了状態。0: 未定義。1: 成功。2: 失敗
-        # [19]: 制御開始後の状態値の受信フラグ
-        # [20]: 制御開始後の目標値の受信フラグ
-        # [21]: 棚の上の箱を作業台に置くデモの実行フラグ。0: 終了。1: 開始
-        # [22]: 棚の上の箱を作業台に置くデモの完了状態。0: 未定義。1: 成功。2: 失敗
-        # [23]: 現在のツール番号
-        # [24:30]: 関節の制御値
-        # [31]: エリア機能の有効/無効状態。0: 無効。1: 有効
-        # [32]: プロセス終了フラグ
-        # [33]: ログ出力先の変更フラグ(control用)
-        # [34]: ログ出力先の変更フラグ(monitor用)
-        # [35]: ログ出力先の変更フラグ(contol-archiver用)
-        # [36]: 0: 非常停止でない。1: 非常停止
-        # [37]: スレーブモードの状態値。0: 通常モード。1: スレーブモード
-        # [38]: カッター移動の実行フラグ。0: 終了。1: 開始
-        # [39]: カッター移動の完了状態。0: 未定義。1: 成功。2: 失敗
-        # [40]: ハンドの把持力。
-        # [41]: ツールチェンジなど後の制御可能フラグ。0: 制御不可。1: 制御可能
-        # [42:48]: TCP姿勢
-        # [48]: TCP姿勢受信フラグ。0: 未受信。1: 受信済み
-        self.ar = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf) # 共有メモリ上の Array
-        self.ar[:] = 0
+        self.shm = NamedSharedMemory(create=True)
         self.manager = multiprocessing.Manager()
         topic_types = ["mgr/register", "dev", "robot", "control"]
         self.topic_memory = TopicMemory(self.manager, topic_types=topic_types)
@@ -135,8 +98,8 @@ class ProcessManager:
         self.state_monitor_gui = True
 
     def stop_all_processes(self):
-        self.ar[32] = 1
-        self.ar[16] = 1
+        self.shm.exit_program = 1
+        self.shm.stop_realtime_control = 1
         if self.recvP is not None:
             self.recvP.join()
             print("MQTT receive process joined.")
@@ -153,10 +116,8 @@ class ProcessManager:
             self.monitor_guiP.join()
             print("Monitor GUI process joined.")
         print("All subprocesses joined.")
-        self.sm.close()
-        print("Shared memory closed.")
-        self.sm.unlink()
-        print("Shared memory unlinked.")
+        self.shm.release()
+        print("Shared memory released.")
         self.manager.shutdown()
         print("Manager shutdown complete.")
         self.main_to_control_pipe.close()
@@ -184,7 +145,7 @@ class ProcessManager:
 
     @property
     def state_mqtt_control(self):
-        return self.ar[15] == 1
+        return self.shm.is_mqtt_control == 1
 
     # MQTT制御コマンド群
     def enable(self):
@@ -231,9 +192,9 @@ class ProcessManager:
 
     def change_log_file(self, logging_dir: str):
         # モニタプロセス
-        self.ar[34] = 1
+        self.shm.change_log_file_monitor = 1
         self._send_command_to_monitor({"command": "change_log_file", "params": {"logging_dir": logging_dir}})
         # 制御記録用プロセス
-        self.ar[35] = 1
+        self.shm.change_log_file_control_archiver = 1
         self._send_command_to_control_archiver({"command": "change_log_file", "params": {"logging_dir": logging_dir}})
         return {"command": "change_log_file", "status": True, "message": "", "result": {}}

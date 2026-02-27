@@ -1,4 +1,3 @@
-import multiprocessing.shared_memory as sm
 import sys
 import time
 import threading
@@ -10,10 +9,9 @@ from pyqtgraph.Qt import QtCore, QtWidgets
 
 from ..robot.config import (
     ABS_JOINT_LIMIT,
-    SHM_NAME,
-    SHM_SIZE,
     T_INTV,
 )
+from ..robot.shared_memory import NamedSharedMemory
 
 
 class JointMonitorPlot(QtWidgets.QWidget):
@@ -33,9 +31,7 @@ class JointMonitorPlot(QtWidgets.QWidget):
             'target': [deque(maxlen=max_points) for _ in range(self.n_joints)],
             'control': [deque(maxlen=max_points) for _ in range(self.n_joints)],
         }
-        self.shm = sm.SharedMemory(SHM_NAME)
-        self.pose = np.ndarray(
-            (SHM_SIZE,), dtype=np.float32, buffer=self.shm.buf)
+        self.shm = NamedSharedMemory(create=False)
         self.data_lock = threading.Lock()
         self._stop_event = threading.Event()
         self.data_thread = threading.Thread(
@@ -74,13 +70,15 @@ class JointMonitorPlot(QtWidgets.QWidget):
         # 共有メモリから最近数件のデータを取得、高速なのでロックしてもOK
         while not self._stop_event.is_set():
             t = time.time() - self.t_start
-            pose = self.pose.copy()
+            joint_state = self.shm.joint_state.copy()
+            joint_target = self.shm.joint_target.copy()
+            joint_control = self.shm.joint_control.copy()
             with self.data_lock:
                 self.xdata.append(t)
                 for i in range(self.n_joints):
-                    self.ydata['state'][i].append(float(pose[i]))
-                    self.ydata['target'][i].append(float(pose[i+6]))
-                    self.ydata['control'][i].append(float(pose[i+24]))
+                    self.ydata['state'][i].append(float(joint_state[i]))
+                    self.ydata['target'][i].append(float(joint_target[i]))
+                    self.ydata['control'][i].append(float(joint_control[i]))
             # ループ時間が一定になるようにする
             t_after = time.time() - self.t_start
             t_elapsed = t_after - t
@@ -104,8 +102,8 @@ class JointMonitorPlot(QtWidgets.QWidget):
         for i in range(self.n_joints):
             for k in self.ydata:
                 self.curves[i][k].setData(x, y[k][i])
-        if self.pose[32] == 1:
-            self.shm.close()
+        if self.shm.exit_program == 1:
+            self.shm.release()
             time.sleep(1)
 
 

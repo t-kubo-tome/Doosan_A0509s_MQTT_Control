@@ -13,15 +13,13 @@ import sys
 import json
 import psutil
 
-import multiprocessing as mp
-
-import numpy as np
 
 from dotenv import load_dotenv
 
 from ..common.utils import rad2deg_list
 
-from .config import SHM_NAME, SHM_SIZE, T_INTV
+from .config import T_INTV
+from .shared_memory import NamedSharedMemory
 from .tools import tool_infos, tool_classes
 
 
@@ -118,10 +116,10 @@ class Doosan_MON:
         last = 0
         while True:
             # ログファイル変更時
-            if self.pose[34] == 1:
+            if self.shm.change_log_file_monitor == 1:
                 return LoopResult.LOG_FILE_CHANGED
             # 中断時
-            if self.pose[32] == 1:
+            if self.shm.exit_program == 1:
                 return LoopResult.INTERRUPTED
             # ループが回り続けるようにタイムアウトを設定
             try:
@@ -144,7 +142,7 @@ class Doosan_MON:
 
             # MQTT手動制御モード時のみ記録する
             # それ以外の時のエラーはstate情報は必要ないと考えたため
-            if f is not None and self.pose[15] == 1:
+            if f is not None and self.shm.is_mqtt_control == 1:
                 joints = actual_joint_js.get("joints")
                 if joints is not None:
                     joints = rad2deg_list(joints)
@@ -187,13 +185,12 @@ class Doosan_MON:
         logging_dir = command["params"]["logging_dir"]
         self.logger.info("Change log file")
         self.logging_dir = logging_dir
-        self.pose[34] = 0
+        self.shm.change_log_file_monitor = 0
 
     def run_proc(self, topic_memory, slave_mode_lock, log_queue, monitor_pipe, monitor_queue, logging_dir, disable_mqtt: bool = False):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
-        self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.shm = NamedSharedMemory(create=False)
         self.topic_memory = topic_memory
         self.slave_mode_lock = slave_mode_lock
         self.monitor_pipe = monitor_pipe
@@ -220,7 +217,7 @@ class Doosan_MON:
                         self.client.loop_stop()
                         self.client.disconnect()
                     self.monitor_queue.close()
-                    self.sm.close()
+                    self.shm.release()
                     time.sleep(1)
                     self.logger.info("Process stopped")
                     self.handler.close()

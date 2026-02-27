@@ -5,20 +5,16 @@ import json
 import logging
 import logging.handlers
 from paho.mqtt import client as mqtt
-import multiprocessing.shared_memory
-
-
 import os
 from datetime import datetime
-import numpy as np
 import time
 import sys
 
 ## ここでUUID を使いたい
 import uuid
 
-from .config import SHM_NAME, SHM_SIZE
 from ..common.utils import rad2deg_list
+from .shared_memory import NamedSharedMemory
 
 from dotenv import load_dotenv
 
@@ -148,8 +144,7 @@ class MQTT_Recv:
     def run_proc(self, topic_memory, log_queue, command_queue=None):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.sm = multiprocessing.shared_memory.SharedMemory(SHM_NAME)
-        self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.shm = NamedSharedMemory(create=False)
         self.topic_memory = topic_memory
         self.command_queue = command_queue
         self.connect_mqtt()
@@ -161,7 +156,7 @@ class MQTT_Recv:
                 self._register_to_manager(now)
 
             # プロセス終了時
-            if self.pose[32] == 1:
+            if self.shm.exit_program == 1:
                 info = {"devId": ROBOT_UUID}
                 self.client.publish(
                     MQTT_MANAGE_TOPIC + "/unregister", json.dumps(info))
@@ -169,7 +164,7 @@ class MQTT_Recv:
                     "publish to: " + MQTT_MANAGE_TOPIC + "/unregister")
                 self.client.loop_stop()
                 self.client.disconnect()
-                self.sm.close()
+                self.shm.release()
                 time.sleep(1)
                 self.logger.info("Process stopped")
                 self.handler.close()
@@ -181,33 +176,33 @@ class MQTT_Recv:
         # ロボット固有の実装は基本的にここだけで完結するはず
         js = json.loads(msg.payload)
         if "joints" in js:
-            self.pose[6:12] = rad2deg_list(js["joints"])
+            self.shm.joint_target = rad2deg_list(js["joints"])
 
         if "grip" in js:
             right_grip = js['grip'][1]
             if right_grip:
-                self.pose[13] = 1
+                self.shm.hand_target = 1
             else:
-                self.pose[13] = 2
+                self.shm.hand_target = 2
         
         if "tool_change" in js:
-            if self.pose[17] == 0:
+            if self.shm.tool_change == 0:
                 tool = js["tool_change"]
-                self.pose[16] = 1
-                self.pose[17] = tool
-        
-        if "put_down_box" in js:
-            if self.pose[21] == 0:
-                if js["put_down_box"]:
-                    self.pose[16] = 1
-                    self.pose[21] = 1
-        
-        if "line_cut" in js:
-            if self.pose[38] == 0:
-                if js["line_cut"]:
-                    self.pose[16] = 1
-                    self.pose[38] = 1
+                self.shm.stop_realtime_control = 1
+                self.shm.tool_change = tool
 
-        self.pose[20] = 1
+        if "put_down_box" in js:
+            if self.shm.demo_put_down_box == 0:
+                if js["put_down_box"]:
+                    self.shm.stop_realtime_control = 1
+                    self.shm.demo_put_down_box = 1
+
+        if "line_cut" in js:
+            if self.shm.line_cut == 0:
+                if js["line_cut"]:
+                    self.shm.stop_realtime_control = 1
+                    self.shm.line_cut = 1
+
+        self.shm.is_joint_target_received = 1
         js["topic"] = msg.topic
         self.topic_memory.write("control", dict(js))

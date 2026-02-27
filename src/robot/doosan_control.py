@@ -12,7 +12,6 @@ import sys
 import json
 import psutil
 
-import multiprocessing as mp
 import threading
 
 import modern_robotics as mr
@@ -25,7 +24,8 @@ from ..common.interpolate import DelayedInterpolator
 from ..common.utils import deg2rad_list, StopWatch
 
 # Robot specific modules
-from .config import SHM_NAME, SHM_SIZE, ABS_JOINT_LIMIT, T_INTV
+from .config import ABS_JOINT_LIMIT, T_INTV
+from .shared_memory import NamedSharedMemory
 from .doosan_robot import DoosanRobot, ROBOT_STATE
 from .tools import tool_infos, tool_classes, tool_base
 from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
@@ -164,7 +164,7 @@ class Doosan_CON:
                 if self.robot_logger.isEnabledFor(log_record.levelno):
                     self.robot_logger.handle(log_record)
                 time.sleep(0.01)
-            if self.pose[32] == 1:
+            if self.shm.exit_program == 1:
                 break
     
     def init_monitor_loop(self):
@@ -201,7 +201,7 @@ class Doosan_CON:
         ]
 
     def get_is_in_servo_mode(self) -> bool:
-        return bool(self.pose[14])
+        return bool(self.shm.maybe_slave_mode)
     
     def get_is_emergency_stopped(self) -> bool:
         robot_state = self.all_robot_state["robot_state"]
@@ -257,13 +257,13 @@ class Doosan_CON:
                 actual_joint = None
 
             if actual_joint is not None:
-                self.pose[:6] = actual_joint
-                self.pose[19] = 1
+                self.shm.joint_state = actual_joint
+                self.shm.is_joint_state_received = 1
                 actual_joint_js["joints"] = self.real_to_vr_joint(actual_joint)
 
             if actual_tcp_pose is not None:
-                self.pose[42:48] = actual_tcp_pose
-                self.pose[48] = 1
+                self.shm.pose_state = actual_tcp_pose
+                self.shm.is_pose_state_received = 1
                 actual_joint_js["poses"] = actual_tcp_pose
 
             actual_joint_js["time"] = now
@@ -314,7 +314,7 @@ class Doosan_CON:
                     self.logger.info("Robot is not in servo mode")
             last_is_in_servo_mode = is_in_servo_mode
             actual_joint_js["servo_mode"] = is_in_servo_mode
-            self.pose[37] = int(is_in_servo_mode)
+            self.shm.slave_mode = int(is_in_servo_mode)
 
             # 緊急停止状態かどうかを取得する
             is_emergency_stopped = False
@@ -330,7 +330,7 @@ class Doosan_CON:
                     self.logger.info("Emergency stop is OFF")
             last_is_emergency_stopped = is_emergency_stopped
             actual_joint_js["emergency_stopped"] = is_emergency_stopped
-            self.pose[36] = int(is_emergency_stopped)
+            self.shm.is_emergency_stopped = int(is_emergency_stopped)
 
             error = {}
             try:
@@ -348,11 +348,11 @@ class Doosan_CON:
             if error:
                 actual_joint_js["error"] = error
 
-            actual_joint_js["mqtt_control"] = self.pose[15] == 1
+            actual_joint_js["mqtt_control"] = self.shm.is_mqtt_control == 1
 
             self.monitor_queue.put(actual_joint_js)
 
-            if self.pose[32] == 1:
+            if self.shm.exit_program == 1:
                 break
 
             # 適度に間隔を開ける
@@ -377,8 +377,8 @@ class Doosan_CON:
             force = 0
         else:
             force += 100
-        self.pose[12] = width
-        self.pose[40] = force
+        self.shm.hand_state = width
+        self.shm.hand_force = force
 
     def find_and_setup_hand(self, tool_id):
         # ダミー処理
@@ -395,7 +395,7 @@ class Doosan_CON:
         self.hand_name = name
         self.hand = hand
         self.tool_id = tool_id
-        self.pose[23] = tool_id
+        self.shm.tool_id = tool_id
         # NOTE: ツールチェンジ時は同等の機能の追加が必要
         # if tool_id != -1:
         #     self.robot.SetToolDef(
@@ -439,16 +439,16 @@ class Doosan_CON:
             if stop_event.is_set():
                 break
             # 現在情報を取得しているかを確認
-            if self.pose[19] != 1:
+            if self.shm.is_joint_state_received != 1:
                 time.sleep(t_intv_hand)
                 continue
             # 目標値を取得しているかを確認
-            if self.pose[20] != 1:
+            if self.shm.is_joint_target_received != 1:
                 time.sleep(t_intv_hand)
                 continue
             # ツールの値を取得
             # 値0が意味を持つので共有メモリではオフセットをかけている
-            tool = self.pose[13]
+            tool = self.shm.hand_target
             if tool == 0:
                 time.sleep(t_intv_hand)
                 continue
@@ -500,8 +500,8 @@ class Doosan_CON:
         self.logger.info("Start Control Loop")
         # 状態値が最新の値になるようにする
         time.sleep(1)
-        self.pose[19] = 0
-        self.pose[20] = 0
+        self.shm.is_joint_state_received = 0
+        self.shm.is_joint_target_received = 0
         target_stop = None
         sw = StopWatch()
         stop_event = threading.Event()
@@ -539,12 +539,12 @@ class Doosan_CON:
             # 待っている。もしもっと待つと最初に
             # ガッとロボットが動いてしまう。実際のシステムでは
             # targetはstateに依存するのでまた別に考える
-            stop = self.pose[16]
+            stop = self.shm.stop_realtime_control
             if stop:
                 stop_event.set()
 
             # 現在情報を取得しているかを確認
-            if self.pose[19] != 1:
+            if self.shm.is_joint_state_received != 1:
                 time.sleep(t_intv)
                 # self.logger.info("Wait for monitoring")
                 # 取得する前に終了する場合即時終了可能
@@ -552,7 +552,7 @@ class Doosan_CON:
                     break
                 # ロボットにコマンドを送る前は、非常停止が押されているかを
                 # スレーブモードが解除されているかで確認する
-                if self.pose[37] != 1:
+                if self.shm.slave_mode != 1:
                     msg = "Robot is not in servo mode"
                     with lock:
                         error_info['kind'] = "robot"
@@ -564,10 +564,10 @@ class Doosan_CON:
                 continue
 
             # ツールチェンジなど後の制御可能フラグ
-            self.pose[41] = 1
+            self.shm.is_controllable = 1
 
             # 目標値を取得しているかを確認
-            if self.pose[20] != 1:
+            if self.shm.is_joint_target_received != 1:
                 time.sleep(t_intv)
                 # self.logger.info("Wait for target")
                 # 取得する前に終了する場合即時終了可能
@@ -575,7 +575,7 @@ class Doosan_CON:
                     break
                 # ロボットにコマンドを送る前は、非常停止が押されているかを
                 # スレーブモードが解除されているかで確認する
-                if self.pose[37] != 1:
+                if self.shm.slave_mode != 1:
                     msg = "Robot is not in servo mode"
                     with lock:
                         error_info['kind'] = "robot"
@@ -587,16 +587,16 @@ class Doosan_CON:
                 continue
 
             # NOTE: 最初にVR側でロボットの状態値を取得できていれば追加してもよいかも
-            # state = self.pose[:6].copy()
-            # target = self.pose[6:12].copy()
+            # state = self.shm.joint_state.copy()
+            # target = self.shm.joint_target.copy()
             # if np.any(np.abs(state - target) > 0.01):
             #     continue
 
             # 関節の状態値
-            state = self.pose[:6].copy()
+            state = self.shm.joint_state.copy()
 
             # 目標値
-            target = self.pose[6:12].copy()
+            target = self.shm.joint_target.copy()
             sw.lap("Check target")
             target_raw = target
 
@@ -702,7 +702,7 @@ class Doosan_CON:
                     self.last_control_velocity = np.zeros(6)
                 # ロボットにコマンドを送る前は、非常停止が押されているかを
                 # スレーブモードが解除されているかで確認する
-                if self.pose[37] != 1:
+                if self.shm.slave_mode != 1:
                     msg = "Robot is not in servo mode"
                     with lock:
                         error_info['kind'] = "robot"
@@ -953,7 +953,7 @@ class Doosan_CON:
                 raise ValueError
 
             sw.lap("Put control to shared memory")
-            self.pose[24:30] = control
+            self.shm.joint_control = control
 
             sw.lap("Save control - gather data")
             # 分析用データ保存
@@ -1013,7 +1013,7 @@ class Doosan_CON:
 
                 if not use_hand_thread:
                     sw.lap("Send hand command")
-                    tool = self.pose[13]
+                    tool = self.shm.hand_target
                     tool_corrected = tool
                     if tool_corrected != last_tool_corrected:
                         if tool_corrected == 1:
@@ -1052,7 +1052,7 @@ class Doosan_CON:
         self.leave_servo_mode()       
 
          # ツールチェンジなど後の制御可能フラグ
-        self.pose[41] = 0
+        self.shm.is_controllable = 0
 
         hand_thread.join()
         if error_event.is_set():
@@ -1191,20 +1191,20 @@ class Doosan_CON:
         raise NotImplementedError
 
     def enter_servo_mode(self) -> bool:
-        # self.pose[14]は0のとき必ず通常モード。
-        # self.pose[14]は1のとき基本的にスレーブモードだが、
+        # self.shm.maybe_slave_modeは0のとき必ず通常モード。
+        # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
         with self.slave_mode_lock:
-            self.pose[14] = 1
+            self.shm.maybe_slave_mode = 1
         return True
 
     def leave_servo_mode(self) -> bool:
-        # self.pose[14]は0のとき必ず通常モード。
-        # self.pose[14]は1のとき基本的にスレーブモードだが、
+        # self.shm.maybe_slave_modeは0のとき必ず通常モード。
+        # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
-        self.pose[14] = 0
+        self.shm.maybe_slave_mode = 0
         return True
 
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
@@ -1245,8 +1245,8 @@ class Doosan_CON:
                 # 停止するのは、ユーザーが要求した場合か、自然に内部エラーが発生した場合
                 self.control_loop()
                 # ここまで正常に終了した場合、ユーザーが要求した場合が成功を意味する
-                if self.pose[16] == 1:
-                    self.pose[16] = 0
+                if self.shm.stop_realtime_control == 1:
+                    self.shm.stop_realtime_control = 0
                     self.logger.info("User required stop and succeeded")
                     return True
             except Exception as e:
@@ -1258,7 +1258,7 @@ class Doosan_CON:
 
                 # 目標値が状態値から大きく離れた場合は自動復帰しない
                 if str(e) == "Target and state are too different":
-                    self.pose[16] = 0
+                    self.shm.stop_realtime_control = 0
                     return False
 
                 # 必ずスレーブモードから抜ける
@@ -1270,30 +1270,30 @@ class Doosan_CON:
                     # タイムアウトの場合はスレーブモードは切れているので
                     # 共有メモリを更新する
                     if self.should_recover_automatic_on_timeout_error(e_leave):
-                        self.pose[14] = 0
+                        self.shm.maybe_slave_mode = 0
                     # それ以外は原因不明なのでループは抜ける
                     else:
-                        self.pose[16] = 0
+                        self.shm.stop_realtime_control = 0
                         return False
 
                 # 非常停止ボタンの状態値を最新にするまで待つ必要がある
                 time.sleep(1)
                 # 非常停止ボタンが押された場合は自動復帰しない
-                if self.pose[36] == 1:
+                if self.shm.is_emergency_stopped == 1:
                     self.logger.error("Emergency stop is pressed")
-                    self.pose[16] = 0
+                    self.shm.stop_realtime_control = 0
                     return False
 
                 # タイムアウトの場合は接続からやり直す
                 if self.should_recover_automatic_on_timeout_error(e):
                     is_success = self.recover_automatic_on_timeout_error()
                     if not is_success:
-                        self.pose[16] = 0
+                        self.shm.stop_realtime_control = 0
                         return False
                 # ここまでに接続ができている場合
                 is_success = self.recover_automatic_on_recoverable_error()
                 if not is_success:
-                    self.pose[16] = 0
+                    self.shm.stop_realtime_control = 0
                     return False
 
     def mqtt_control_loop(self) -> None:
@@ -1303,9 +1303,9 @@ class Doosan_CON:
             # 停止するのは、ユーザーが要求した場合か、自然に内部エラーが発生した場合
             success_stop = self.control_loop_w_recover_automatic()
             # 停止フラグが成功の場合は、ユーザーが要求した場合のみありうる
-            next_tool_id = self.pose[17].copy()
-            put_down_box = self.pose[21].copy()
-            line_cut = self.pose[38].copy()
+            next_tool_id = self.shm.tool_change
+            put_down_box = self.shm.demo_put_down_box
+            line_cut = self.shm.line_cut
             if success_stop:
                 # ツールチェンジが要求された場合
                 if next_tool_id != 0:
@@ -1318,16 +1318,16 @@ class Doosan_CON:
                         # NOTE: より良い方法がないか
                         # VRアニメーションがロボットの動きに追従し終わるのを待つ
                         time.sleep(3)
-                        self.pose[18] = 1
-                        self.pose[17] = 0
+                        self.shm.tool_change_result = 1
+                        self.shm.tool_change = 0
                         # VRのIKで解いた関節角度にロボットの関節角度を合わせるのを待つ
                         time.sleep(3)
                         self.logger.info("Tool change succeeded")
                     except Exception as e:
                         self.logger.error("Error during tool change")
                         self.logger.error(f"{self.format_error(e)}")
-                        self.pose[18] = 2
-                        self.pose[17] = 0
+                        self.shm.tool_change_result = 2
+                        self.shm.tool_change = 0
                         break
                 # 棚の上の箱を置くことが要求された場合
                 elif put_down_box != 0:
@@ -1349,17 +1349,17 @@ class Doosan_CON:
                 # ツールチェンジが要求された場合
                 if next_tool_id != 0:
                     # 要求コマンドのみリセット
-                    self.pose[18] = 2
-                    self.pose[17] = 0
+                    self.shm.tool_change_result = 2
+                    self.shm.tool_change = 0
                 # 棚の上の箱を置くことが要求された場合
                 elif put_down_box != 0:
                     # 要求コマンドのみリセット
-                    self.pose[22] = 2
-                    self.pose[21] = 0
+                    self.shm.demo_put_down_box_result = 2
+                    self.shm.demo_put_down_box = 0
                 elif line_cut != 0:
                     # 要求コマンドのみリセット
-                    self.pose[39] = 2
-                    self.pose[38] = 0
+                    self.shm.line_cut_result = 2
+                    self.shm.line_cut = 0
                 # ループを抜ける
                 break
 
@@ -1377,10 +1377,10 @@ class Doosan_CON:
 
     def jog_joint(self, joint: int, direction: float) -> bool:
         try:
-            if self.pose[19] != 1:
+            if self.shm.is_joint_state_received != 1:
                 raise ValueError("Joint jog requires joint state to be monitored but currently not")
             # joint state
-            joints = self.pose[:6].copy()
+            joints = self.shm.joint_state.copy()
             joints = np.asarray(joints)
             joints[joint] += direction
             joints = joints.tolist()
@@ -1395,10 +1395,10 @@ class Doosan_CON:
 
     def jog_tcp(self, axis: int, direction: float) -> bool:
         try:
-            if self.pose[48] != 1:
+            if self.shm.is_pose_state_received != 1:
                 raise ValueError("TCP jog requires TCP state to be monitored but currently not")
             # TCP state
-            poses = self.pose[42:48].copy()
+            poses = self.shm.pose_state.copy()
             poses = np.asarray(poses)
             poses[axis] += direction
             poses = poses.tolist()
@@ -1441,13 +1441,13 @@ class Doosan_CON:
 
     def start_mqtt_control(self) -> bool:
         self.logger.info("Start MQTT control")
-        self.pose[15] = 1
+        self.shm.is_mqtt_control = 1
         return True
 
     def stop_mqtt_control(self) -> bool:
         self.logger.info("Stop MQTT control")
-        self.pose[16] = 1
-        while self.pose[15] != 0:
+        self.shm.stop_realtime_control = 1
+        while self.shm.is_mqtt_control != 0:
             time.sleep(0.1)
         return True
 
@@ -1463,7 +1463,7 @@ class Doosan_CON:
                 command = command_dict["command"]
                 wait = command_dict.get("wait", False)
                 # MQTTリアルタイム制御中
-                if self.pose[15] == 1:
+                if self.shm.is_mqtt_control == 1:
                     if command["command"] == "stop_mqtt_control":
                         status = self.stop_mqtt_control()
                     # 他のコマンドは受け付けず失敗をすぐに返す
@@ -1517,8 +1517,7 @@ class Doosan_CON:
     def run_proc(self, control_pipe, slave_mode_lock, log_queue, control_to_archiver_queue, monitor_queue):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
-        self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.shm = NamedSharedMemory(create=False)
         self.slave_mode_lock = slave_mode_lock
         self.control_pipe = control_pipe
         self.control_to_archiver_queue = control_to_archiver_queue
@@ -1531,16 +1530,16 @@ class Doosan_CON:
         self.init_receive_command_loop()
         # 外のループでMQTTリアルタイム制御の開始とプロセス終了を監視する
         while True:
-            if self.pose[15] == 1:
+            if self.shm.is_mqtt_control == 1:
                 # 内のループでMQTTリアルタイム制御を行う
                 self.mqtt_control_loop()
-                self.pose[15] = 0
-            if self.pose[32] == 1:
+                self.shm.is_mqtt_control = 0
+            if self.shm.exit_program == 1:
                 self.del_robot()
                 self.del_robot_log()
                 self.del_monitor_loop()
                 self.del_receive_command_loop()
-                self.sm.close()
+                self.shm.release()
                 self.control_to_archiver_queue.close()
                 self.monitor_queue.close()
                 time.sleep(1)
@@ -1556,7 +1555,7 @@ class Doosan_CON_Archiver:
     def monitor_start(self, f: TextIO | None = None):
         while True:
             # ログファイル変更時
-            if self.pose[35] == 1:
+            if self.shm.change_log_file_control_archiver == 1:
                 return True
             try:
                 datum = self.control_to_archiver_queue.get(
@@ -1570,7 +1569,7 @@ class Doosan_CON_Archiver:
                     s = s + json.dumps(d, ensure_ascii=False) + "\n"
                 f.write(s)
             # プロセス終了時
-            if self.pose[32] == 1:
+            if self.shm.exit_program == 1:
                 return False
 
     def setup_logger(self, log_queue):
@@ -1590,13 +1589,12 @@ class Doosan_CON_Archiver:
 
     def change_log_file(self, logging_dir: str) -> None:
         self.logging_dir = logging_dir
-        self.pose[35] = 0
+        self.shm.change_log_file_control_archiver = 0
 
     def run_proc(self, control_arcv_pipe, log_queue, logging_dir, control_to_archiver_queue):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.sm = mp.shared_memory.SharedMemory(SHM_NAME)
-        self.pose = np.ndarray((SHM_SIZE,), dtype=np.dtype("float32"), buffer=self.sm.buf)
+        self.shm = NamedSharedMemory(create=False)
         self.control_arcv_pipe = control_arcv_pipe
         self.logging_dir = logging_dir
         self.control_to_archiver_queue = control_to_archiver_queue
@@ -1620,8 +1618,8 @@ class Doosan_CON_Archiver:
                 self.logger.error("Error in control archiver")
                 self.logger.error(e)
             # プロセス終了時は大きいループを抜ける
-            if self.pose[32] == 1:
-                self.sm.close()
+            if self.shm.exit_program == 1:
+                self.shm.release()
                 self.control_to_archiver_queue.close()
                 time.sleep(1)
                 self.logger.info("Process stopped")
