@@ -338,7 +338,7 @@ class HeadlessLoop:
         output = self.pm.change_log_file(self.logging_dir)
         self.logger.info(f"Changed log directory to {self.logging_dir}")
         # サブプロセスの完了を待つ
-        while self.pm.ar[33] != 0 or self.pm.ar[34] != 0:
+        while self.pm.ar[34] != 0 or self.pm.ar[35] != 0:
             time.sleep(0.1)
         self.setup_logging(self.pm.log_queue, self.logging_dir)
         self._make_and_publish_response(**output)

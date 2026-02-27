@@ -819,7 +819,7 @@ class MQTTWin:
         self.logger.info("Change log file")
         # サブプロセスの制御値、状態値のファイルの保存先の変更完了を待つ
         while True:
-            if self.pm.ar[33] == 0 and self.pm.ar[34] == 0:
+            if self.pm.ar[34] == 0 and self.pm.ar[35] == 0:
                 break
             time.sleep(0.1)
         self.setup_logging(
