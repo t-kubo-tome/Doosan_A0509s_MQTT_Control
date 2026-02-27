@@ -100,6 +100,7 @@ class Doosan_MON:
     def connect_mqtt(self, disable_mqtt: bool = False):
         if disable_mqtt:
             self.client = None
+            return
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self.on_connect         # 接続時のコールバック関数を登録
