@@ -104,7 +104,7 @@ use_first_speed_limit = True
 use_second_speed_limit = True
 control_interface: Literal["position", "velocity"] = "velocity"
 save_control = SAVE
-
+use_normalize_target_to_nearest = True
 
 class Doosan_CON:
     def __init__(self):
@@ -115,14 +115,19 @@ class Doosan_CON:
         self.all_robot_state = {}
 
     def init_robot(self):
+        # TODO: 要改善
         # ロボット固有の処理を含む
         try:
+            use_robot_log_loop = True
+            use_monitor_loop = True
             if self.robot is None:
                 self.robot = DoosanRobot(ROBOT_IP, "queue", t_intv)
-                self.init_robot_log_loop()
                 if not self.robot.start():
                     raise ValueError("Failed to start robot")
-                self.init_monitor_loop()
+                if use_robot_log_loop:
+                    self.init_robot_log_loop()                
+                if use_monitor_loop:
+                    self.init_monitor_loop()
             tool_id = int(os.environ["TOOL_ID"])
             self.find_and_setup_hand(tool_id)
         except Exception as e:
@@ -138,35 +143,41 @@ class Doosan_CON:
         if hasattr(self, 'robot_log_thread'):
             self.robot_log_thread.join()
 
+    def robot_log_loop_step(self):
+        # ロボット固有の処理を含む
+        log_block = self.robot.pop_log_queue()
+        for log in log_block:
+            # log is a tuple: (timestamp, level, message)
+            timestamp, level, message = log                
+            # ログレコードを手動で作成してタイムスタンプを反映
+            log_record = logging.LogRecord(
+                name=self.robot_logger.name,
+                level=getattr(logging, level, logging.INFO),
+                pathname="",
+                lineno=0,
+                msg=message,
+                args=(),
+                exc_info=None
+            )
+            # タイムスタンプを設定（Unix timestamp）
+            log_record.created = timestamp
+            log_record.msecs = (timestamp - int(timestamp)) * 1000
+            # ログレコードをハンドラーに直接渡す
+            if self.robot_logger.isEnabledFor(log_record.levelno):
+                self.robot_logger.handle(log_record)
+
     def robot_log_loop(self):
         while True:
-            log_block = self.robot.pop_log_queue()
-            if len(log_block) == 0:
-                time.sleep(0.01)
-                continue
-            for log in log_block:
-                # log is a tuple: (timestamp, level, message)
-                timestamp, level, message = log                
-                # ログレコードを手動で作成してタイムスタンプを反映
-                log_record = logging.LogRecord(
-                    name=self.robot_logger.name,
-                    level=getattr(logging, level, logging.INFO),
-                    pathname="",
-                    lineno=0,
-                    msg=message,
-                    args=(),
-                    exc_info=None
-                )
-                # タイムスタンプを設定（Unix timestamp）
-                log_record.created = timestamp
-                log_record.msecs = (timestamp - int(timestamp)) * 1000
-                # ログレコードをハンドラーに直接渡す
-                if self.robot_logger.isEnabledFor(log_record.levelno):
-                    self.robot_logger.handle(log_record)
-                time.sleep(0.01)
+            now = time.time()
+            self.robot_log_loop_step()
             if self.shm.exit_program == 1:
                 break
-    
+            t_elapsed = time.time() - now
+            # ログの優先度は低いため周期を長くする
+            t_wait = T_INTV * 2 - t_elapsed
+            if t_wait > 0:
+                time.sleep(t_wait)
+
     def init_monitor_loop(self):
         self.monitor_thread = threading.Thread(
             target=self.monitor_loop)
@@ -177,21 +188,28 @@ class Doosan_CON:
             self.monitor_thread.join()
 
     def real_to_vr_joint(self, joints: List[float]) -> List[float]:
+        # ロボット固有の処理を含む
         return deg2rad_list(joints)
 
     def get_current_pose_rt(self) -> List[float]:
+        # ロボット固有の処理を含む
         return self.robot.get_current_pose_rt()[1:]
 
     def get_current_joint_rt(self) -> List[float]:
+        # ロボット固有の処理を含む
         return self.robot.get_current_joint_rt()[1:]
     
     def get_current_force_rt(self) -> List[float]:
+        # ロボット固有の処理を含む
         return self.robot.get_current_external_tcp_force_rt()[1:]
 
     def get_all_robot_state_at_once(self) -> None:
+        """ロボットの状態値が個別の関数ではなく少数の関数でまとめて取得できる場合に使用"""
+        # ロボット固有の処理を含む
         self.all_robot_state["robot_state"] = self.robot.get_robot_state()
 
     def get_enabled(self) -> bool:
+        # ロボット固有の処理を含む
         robot_state = self.all_robot_state["robot_state"]
         return robot_state in [
             ROBOT_STATE.STATE_STANDBY,
@@ -201,23 +219,31 @@ class Doosan_CON:
         ]
 
     def get_is_in_servo_mode(self) -> bool:
+        # ロボット固有の処理を含む
+        # Doosanではスレーブモードの状態はAPIでは不明なので制御値を使用
         return bool(self.shm.maybe_slave_mode)
     
     def get_is_emergency_stopped(self) -> bool:
+        # ロボット固有の処理を含む
         robot_state = self.all_robot_state["robot_state"]
         return robot_state == ROBOT_STATE.STATE_EMERGENCY_STOP
 
-    def get_is_normal_mode(self) -> bool:
+    def get_errors(self) -> List[Dict[str, Any]]:
+        # ロボット固有の処理を含む
+        errors = []
         robot_state = self.all_robot_state["robot_state"]
-        return robot_state not in [
+        is_normal_mode = robot_state not in [
             # ROBOT_STATE.STATE_SAFE_OFF,
             ROBOT_STATE.STATE_SAFE_STOP,
             ROBOT_STATE.STATE_SAFE_OFF2,
             ROBOT_STATE.STATE_SAFE_STOP2,
         ]
+        if not is_normal_mode:
+            errors = [{"error_code": 0,
+                       "error_message": "Robot state is not NORMAL"}]
+        return errors
 
     def monitor_loop(self):
-        # ロボット固有の処理を含む
         last = 0
         last_error_monitored = 0
         last_enabled = None
@@ -232,7 +258,6 @@ class Doosan_CON:
                 last_error_monitored = now
             if last_health_check == 0:
                 last_health_check = now
-            
             if last_health_check + 60 < now:
                 last_health_check = now
                 self.logger.info("Health check: Robot monitor is running")
@@ -240,21 +265,24 @@ class Doosan_CON:
             actual_joint_js = {}
 
             # TCP姿勢
+            actual_tcp_pose = None
             try:
                 actual_tcp_pose = self.get_current_pose_rt()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
-                actual_tcp_pose = None
+
             # 関節
+            actual_joint = None
             try:
                 actual_joint = self.get_current_joint_rt()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
-                actual_joint = None
+
             # 起動時など両方0になるときがあるがそのような場合は無効なデータが入っている
-            if np.sum(actual_tcp_pose) == 0 and np.sum(actual_joint) == 0:
-                actual_tcp_pose = None
-                actual_joint = None
+            if actual_tcp_pose is not None and actual_joint is not None:
+                if sum(actual_tcp_pose) == 0 and sum(actual_joint) == 0:                
+                    actual_tcp_pose = None
+                    actual_joint = None
 
             if actual_joint is not None:
                 self.shm.joint_state = actual_joint
@@ -269,11 +297,11 @@ class Doosan_CON:
             actual_joint_js["time"] = now
 
             # [X, Y, Z, RX, RY, RZ]: センサ値の力[N]とモーメント[Nm]
+            forces = None
             try:
                 forces = self.get_current_force_rt()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
-                forces = None
             if forces is not None:
                 actual_joint_js["forces"] = forces
 
@@ -291,6 +319,7 @@ class Doosan_CON:
                 enabled = self.get_enabled()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
+            # 切り替わるときにログを出す
             if enabled != last_enabled:
                 if enabled:
                     self.logger.info("Robot is enabled")
@@ -302,7 +331,6 @@ class Doosan_CON:
             # スレーブモードかどうかを取得する
             is_in_servo_mode = False
             try:
-                # NOTE: Doosanではスレーブモードの状態はAPIでは不明なので制御値を使用
                 is_in_servo_mode = self.get_is_in_servo_mode()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
@@ -332,24 +360,23 @@ class Doosan_CON:
             actual_joint_js["emergency_stopped"] = is_emergency_stopped
             self.shm.is_emergency_stopped = int(is_emergency_stopped)
 
+            # エラー情報を取得する
             error = {}
+            errors = []
             try:
-                is_normal_mode = self.get_is_normal_mode()
-                if not is_normal_mode:
-                    errors = [{"error_code": 0,
-                               "error_message": "Robot state is not NORMAL"}]
-                else:
-                    errors = []
+                errors = self.get_errors()
             except Exception as e:
                 self.logger.error(f"{self.format_error(e)}")
-                errors = []
             if len(errors) > 0:
                 error = {"errors": errors}
+            # エラーがあるときだけ状態値として配信する
             if error:
                 actual_joint_js["error"] = error
 
+            # MQTT制御状態かどうかを取得する
             actual_joint_js["mqtt_control"] = self.shm.is_mqtt_control == 1
 
+            # 状態値として配信用
             self.monitor_queue.put(actual_joint_js)
 
             if self.shm.exit_program == 1:
@@ -361,7 +388,9 @@ class Doosan_CON:
             if t_wait > 0:
                 time.sleep(t_wait)
 
-    def get_hand_state(self):        
+    def get_hand_state(self):
+        # TODO
+        # ロボット固有の処理を含む
         # ハンドの状態値を取得して共有メモリに格納する
         width = None
         force = None
@@ -429,10 +458,9 @@ class Doosan_CON:
         return s
 
     def hand_control_loop(self, stop_event, error_event, lock, error_info):
-        # ハンド固有の処理を含まない
         self.logger.info("Start Hand Control Loop")
         last_tool_corrected = None
-        t_intv_hand = 0.16
+        t_intv_hand = T_INTV * 2
         last_tool_corrected_time = time.time()
         while True:
             now = time.time()
@@ -492,6 +520,28 @@ class Doosan_CON:
                 time.sleep(t_wait)
         self.logger.info("Stop Hand Control Loop")
 
+    def stop_by_user_or_emergency_before_sending_control(
+        self, stop, stop_event, error_event, lock, error_info
+    ) -> bool:
+        # ロボットに制御値を送る前に、ユーザーが停止を要求した場合、即時終了可能
+        if stop:
+            # ハンドの制御を止める
+            stop_event.set()
+            return True
+        # ロボットに制御値を送る前は、非常停止が押されているかどうかは、
+        # 制御値を送るコマンドのエラーで捕捉できないので、
+        # スレーブモードが解除されているかで確認する
+        if self.shm.slave_mode != 1:
+            msg = "Robot is not in servo mode"
+            with lock:
+                error_info['kind'] = "robot"
+                error_info['msg'] = msg
+                error_info['exception'] = ValueError(msg)
+            error_event.set()
+            stop_event.set()
+            return True
+        return False
+
     def control_loop(self, f: TextIO | None = None) -> bool:
         """リアルタイム制御ループ"""
         # ロボット固有の処理を含まない
@@ -510,57 +560,37 @@ class Doosan_CON:
         error_info = {}
         last_target = None
 
-        use_hand_thread = True
-        if use_hand_thread:
-            hand_thread = threading.Thread(
-                target=self.hand_control_loop,
-                args=(stop_event, error_event, lock, error_info)
-            )
-            hand_thread.start()
-        else:
-            last_tool_corrected = None
+        # ハンドの制御は別スレッドで行う（同一スレッドで行うとアームの制御が
+        # 遅くなる事例を複数ロボットで観測済みのため）
+        hand_thread = threading.Thread(
+            target=self.hand_control_loop,
+            args=(stop_event, error_event, lock, error_info)
+        )
+        hand_thread.start()
 
         while True:
             sw.start("Get shared memory")
             now = time.time()
             self.on_step_start_in_control_loop()
 
-            # TODO: これがメインスレッドを遅くしている可能性ありだが
-            # この1行だけでとも思う。要検証
-            # 但しハンド由来のエラーでループを終了できなくなる
+            # ハンドの制御が止まった場合はアームの制御も止める
             if not hand_thread.is_alive():
                 break
 
-            # NOTE: テスト用データなど、時間が経つにつれて
-            # targetの値がstateの値によらずにどんどん
-            # 変化していく場合は、以下で待ちすぎると
-            # 制御値のもとになる最初のtargetの値が
-            # stateから大きく離れるので、t_intv秒と短い時間だけ
-            # 待っている。もしもっと待つと最初に
-            # ガッとロボットが動いてしまう。実際のシステムでは
-            # targetはstateに依存するのでまた別に考える
+            # ユーザーが停止を要求した場合
+            # ロボットに制御値を送る前後でアームの制御の止め方が変わる
             stop = self.shm.stop_realtime_control
-            if stop:
-                stop_event.set()
 
-            # 現在情報を取得しているかを確認
+            # 状態値を取得しているかを確認
             if self.shm.is_joint_state_received != 1:
+                if self.stop_by_user_or_emergency_before_sending_control(
+                    stop, stop_event, error_event, lock, error_info
+                ):
+                    break
+                # 制御の滑らかさ評価で、予め決められた時間ごとの角度（= 軌道）を
+                # targetとして使用する場合、以下で待ちすぎると最初に取得される
+                # targetがstateから大きく離れ、ガッとロボットが動くので、短い時間だけ待つ
                 time.sleep(t_intv)
-                # self.logger.info("Wait for monitoring")
-                # 取得する前に終了する場合即時終了可能
-                if stop:
-                    break
-                # ロボットにコマンドを送る前は、非常停止が押されているかを
-                # スレーブモードが解除されているかで確認する
-                if self.shm.slave_mode != 1:
-                    msg = "Robot is not in servo mode"
-                    with lock:
-                        error_info['kind'] = "robot"
-                        error_info['msg'] = msg
-                        error_info['exception'] = ValueError(msg)
-                    error_event.set()
-                    stop_event.set()
-                    break
                 continue
 
             # ツールチェンジなど後の制御可能フラグ
@@ -568,47 +598,39 @@ class Doosan_CON:
 
             # 目標値を取得しているかを確認
             if self.shm.is_joint_target_received != 1:
+                if self.stop_by_user_or_emergency_before_sending_control(
+                    stop, stop_event, error_event, lock, error_info
+                ):
+                    break
+                # 制御の滑らかさ評価で、予め決められた時間ごとの角度（= 軌道）を
+                # targetとして使用する場合、以下で待ちすぎると最初に取得される
+                # targetがstateから大きく離れ、ガッとロボットが動くので、短い時間だけ待つ
                 time.sleep(t_intv)
-                # self.logger.info("Wait for target")
-                # 取得する前に終了する場合即時終了可能
-                if stop:
-                    break
-                # ロボットにコマンドを送る前は、非常停止が押されているかを
-                # スレーブモードが解除されているかで確認する
-                if self.shm.slave_mode != 1:
-                    msg = "Robot is not in servo mode"
-                    with lock:
-                        error_info['kind'] = "robot"
-                        error_info['msg'] = msg
-                        error_info['exception'] = ValueError(msg)
-                    error_event.set()
-                    stop_event.set()
-                    break
                 continue
-
-            # NOTE: 最初にVR側でロボットの状態値を取得できていれば追加してもよいかも
-            # state = self.shm.joint_state.copy()
-            # target = self.shm.joint_target.copy()
-            # if np.any(np.abs(state - target) > 0.01):
-            #     continue
 
             # 関節の状態値
             state = self.shm.joint_state.copy()
-
-            # 目標値
+            # 関節の目標値
             target = self.shm.joint_target.copy()
+
             sw.lap("Check target")
             target_raw = target
 
-            # 目標値の角度が360度の不定性が許される場合 (1度と-359度を区別しない場合) でも
+            # NOTE: 目標値の角度が360度の不定性が許される場合
+            #  (1度と-359度を区別しない場合、例：VR中の角度) でも、
             # 実機の関節の角度は360度の不定性が許されないので
             # 状態値に最も近い目標値に規格化する
             # TODO: VRと実機の関節の角度が360度の倍数だけずれた状態で、
             # 実機側で制限値を超えると動くVRと動かない実機との間に360度の倍数で
             # ないずれが生じ、急に実機が動く可能性があるので、VR側で
-            # 実機との比較をし、実機側で制限値を超えることがないようにする必要がある
+            # 実機との比較をし、実機側で制限値を超えることがないようにする必要がある。
+            # あるいは目標値の角度範囲が実機と一致するようにするようきちんと
+            # モデル化すればそもそも以下の処理は不要である。
             # とりあえず急に動こうとすれば止まる仕組みは入れている
-            target = state + (target - state + 180) % 360 - 180
+            target_norm = target
+            if use_normalize_target_to_nearest:
+                target_norm = state + (target - state + 180) % 360 - 180
+                target = target_norm
 
             # TODO: VR側でもソフトリミットを設定したほうが良い
             target_th = np.maximum(target, -abs_joint_soft_limit)
@@ -645,10 +667,12 @@ class Doosan_CON:
             sw.lap("First target")
             if self.last == 0:
                 self.logger.info("Start sending control command")
-                # 制御する前に終了する場合即時終了可能
-                if stop:
-                    break
                 self.last = now
+
+                if self.stop_by_user_or_emergency_before_sending_control(
+                    stop, stop_event, error_event, lock, error_info
+                ):
+                    break
 
                 # 目標値を遅延を許して極力線形補間するためのセットアップ
                 if use_interp:
@@ -700,25 +724,16 @@ class Doosan_CON:
                     self.last_control_velocity = np.zeros((N - 1, 6))
                 else:
                     self.last_control_velocity = np.zeros(6)
-                # ロボットにコマンドを送る前は、非常停止が押されているかを
-                # スレーブモードが解除されているかで確認する
-                if self.shm.slave_mode != 1:
-                    msg = "Robot is not in servo mode"
-                    with lock:
-                        error_info['kind'] = "robot"
-                        error_info['msg'] = msg
-                        error_info['exception'] = ValueError(msg)
-                    error_event.set()
-                    stop_event.set()
-                    break
                 continue
 
             sw.lap("Check stop")
-            # 制御値を送り済みの場合は
-            # 目標値を状態値にしてロボットを静止させてから止める
-            # 厳密にはここに初めて到達した場合は制御値は送っていないが
+            # ユーザーが停止を要求した場合、制御値を送信済みの場合は、
+            # 要求時点での状態値を目標値に固定してロボットをゆるやかに静止させてから停止する
+            # なお厳密にはここに始めて到達した時点では、制御値はまだ送っていないが、
+            # 処理の簡潔さのために
             # 簡潔さのため同じように扱う
             if stop:
+                stop_event.set()
                 if target_stop is None:
                     target_stop = state
                 target = target_stop
@@ -1011,19 +1026,6 @@ class Doosan_CON:
                 if not success:
                     break
 
-                if not use_hand_thread:
-                    sw.lap("Send hand command")
-                    tool = self.shm.hand_target
-                    tool_corrected = tool
-                    if tool_corrected != last_tool_corrected:
-                        if tool_corrected == 1:
-                            th1 = threading.Thread(target=self.send_grip)
-                            th1.start()
-                        elif tool_corrected == 2:
-                            th2 = threading.Thread(target=self.send_release)
-                            th2.start()
-                        last_tool_corrected = tool_corrected
-
             sw.lap("Wait control loop")
             t_elapsed = time.time() - now
             t_wait = t_intv - t_elapsed
@@ -1103,9 +1105,11 @@ class Doosan_CON:
         return is_success
 
     def on_step_start_in_control_loop(self) -> None:
+        # ロボット固有の処理を含む
         pass
 
     def should_wait_control_loop(self) -> bool:
+        # ロボット固有の処理を含む
         return True
 
     def is_ready_to_stop(self) -> bool:
@@ -1116,11 +1120,13 @@ class Doosan_CON:
         return (self.control == self.last_control).all()
 
     def send_grip(self) -> None:
+        # ロボット固有の処理を含む
         # fully close the hand at half speed and minimum applied force (62.5% of max force is the minimum value that can be set)
         if self.qb_hand is not None:
             self.qb_hand.setClosure(100, 50, 62.5)
 
     def send_release(self) -> None:
+        # ロボット固有の処理を含む
         # reopen at full speed and full force
         if self.qb_hand is not None:
             self.qb_hand.setClosure(0, 100, 100)
