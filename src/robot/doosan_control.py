@@ -24,7 +24,7 @@ from ..common.interpolate import DelayedInterpolator
 from ..common.utils import deg2rad_list, StopWatch
 
 # Robot specific modules
-from .config import ABS_JOINT_LIMIT, T_INTV
+from .config import ABS_JOINT_LIMIT, N_JOINTS, T_INTV
 from .shared_memory import NamedSharedMemory
 from .doosan_robot import DoosanRobot, ROBOT_STATE
 from .tools import tool_infos, tool_classes, tool_base
@@ -707,23 +707,23 @@ class Doosan_CON:
                     _filter = SMAFilter(n_windows=n_windows)
                     _filter.reset(state)
                 elif filter_kind == "feedback_pd_traj":
-                    N = 6
+                    N = N_JOINTS
                     Tf = t_intv * (N - 1)
                     method = 5
                     Kp = 0.6
                     Kd = 0.02
-                    prev_error = np.zeros(6)
+                    prev_error = np.zeros(N_JOINTS)
                     pd_step = 0
                 elif filter_kind == "none":
                     self.last_control = state
 
                 # 速度制限をフィルタの手前にも入れてみる
-                self.last_target_delayed_velocity = np.zeros(6)
+                self.last_target_delayed_velocity = np.zeros(N_JOINTS)
 
                 if filter_kind == "feedback_pd_traj":
-                    self.last_control_velocity = np.zeros((N - 1, 6))
+                    self.last_control_velocity = np.zeros((N - 1, N_JOINTS))
                 else:
-                    self.last_control_velocity = np.zeros(6)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
                 continue
 
             sw.lap("Check stop")
@@ -863,7 +863,7 @@ class Doosan_CON:
                     )
                     # 速度制限
                     dt = t_intv
-                    # [N - 1, 6]
+                    # [N - 1, N_JOINTS]
                     target_diffs = np.diff(target_steps, axis=0)
                     vs = target_diffs / dt
                     ratios = np.abs(vs) / (speed_limit_ratio * speed_limits)[None, :]
@@ -872,15 +872,15 @@ class Doosan_CON:
                         vs /= max_ratio
 
                     # 加速度制限
-                    # [N, 6]
+                    # [N, N_JOINTS]
                     vs_ = np.concatenate([self.last_control_velocity[[-1], :], vs], axis=0)
-                    # [N - 1, 6]
+                    # [N - 1, N_JOINTS]
                     as_ = np.diff(vs_, axis=0) / dt
                     accel_ratios = np.abs(as_) / (accel_limit_ratio * accel_limits)[None, :]
                     accel_max_ratio = np.max(accel_ratios)
                     if accel_max_ratio > 1:
                         as_ /= accel_max_ratio
-                    # [N - 1, 6]
+                    # [N - 1, N_JOINTS]
                     vs_ = vs_[0][None, :] + np.cumsum(as_, axis=0) * dt
 
                     target_diffs_speed_limited = vs_ * dt
@@ -893,7 +893,7 @@ class Doosan_CON:
                                 target_diffs_speed_limited[i])
                             vs_[i] = target_diffs_speed_limited[i] / dt
 
-                    # [N - 1, 6]
+                    # [N - 1, N_JOINTS]
                     target_steps_speed_limited = target_steps[0][None, :] + np.cumsum(vs_, axis=0) * dt
                     self.last_control_velocity = vs_
 
