@@ -1461,49 +1461,49 @@ class Doosan_CON:
                 # NOTE: 現在未使用
                 result = {}
                 command = command_dict["command"]
+                params = command_dict.get("params", {})
                 wait = command_dict.get("wait", False)
                 # MQTTリアルタイム制御中
                 if self.shm.is_mqtt_control == 1:
-                    if command["command"] == "stop_mqtt_control":
+                    if command == "stop_mqtt_control":
                         status = self.stop_mqtt_control()
                     # 他のコマンドは受け付けず失敗をすぐに返す
                     else:
                         message = "MQTT control in progress. Consider stopping MQTT control first."
                     if wait:
-                        self.control_pipe.send(
-                            {"command": command, "status": status, "message": message, "result": result})
-                    continue
-                # MQTTリアルタイム制御外
-                if command["command"] == "enable":
-                    status = self.enable()
-                elif command["command"] == "disable":
-                    status = self.disable()
-                elif command["command"] == "set_area_enabled":
-                    status = self.set_area_enabled(**command["params"])
-                elif command["command"] == "tidy_pose":
-                    status = self.tidy_pose()
-                elif command["command"] == "release_hand":
-                    status = self.release_hand()
-                elif command["command"] == "line_cut":
-                    status = self.line_cut()
-                elif command["command"] == "clear_error":
-                    status = self.clear_error()
-                elif command["command"] == "start_mqtt_control":
-                    status = self.start_mqtt_control()
-                elif command["command"] == "tool_change":
-                    status = self.tool_change_not_in_rt(**command["params"])
-                elif command["command"] == "jog_joint":
-                    status = self.jog_joint(**command["params"])
-                elif command["command"] == "jog_tcp":
-                    status = self.jog_tcp(**command["params"])
-                elif command["command"] == "move_joint":
-                    status = self.move_joint(**command["params"])
-                elif command["command"] == "demo_put_down_box":
-                    status = self.demo_put_down_box()                
+                        self.control_pipe.send({"command": command, "status": status, "message": message, "result": result})
                 else:
-                    message = "MQTT control not in progress. Consider starting MQTT control first."
-                if wait:
-                     self.control_pipe.send({"command": command, "status": status, "message": message, "result": result})
+                    # MQTTリアルタイム制御外
+                    if command == "enable":
+                        status = self.enable()
+                    elif command == "disable":
+                        status = self.disable()
+                    elif command == "set_area_enabled":
+                        status = self.set_area_enabled(**params)
+                    elif command == "tidy_pose":
+                        status = self.tidy_pose()
+                    elif command == "release_hand":
+                        status = self.release_hand()
+                    elif command == "line_cut":
+                        status = self.line_cut()
+                    elif command == "clear_error":
+                        status = self.clear_error()
+                    elif command == "start_mqtt_control":
+                        status = self.start_mqtt_control()
+                    elif command == "tool_change":
+                        status = self.tool_change_not_in_rt(**params)
+                    elif command == "jog_joint":
+                        status = self.jog_joint(**params)
+                    elif command == "jog_tcp":
+                        status = self.jog_tcp(**params)
+                    elif command == "move_joint":
+                        status = self.move_joint(**params)
+                    elif command == "demo_put_down_box":
+                        status = self.demo_put_down_box()                
+                    else:
+                        message = "MQTT control not in progress. Consider starting MQTT control first."
+                    if wait:
+                        self.control_pipe.send({"command": command, "status": status, "message": message, "result": result})
 
     def init_receive_command_loop(self):
         self.receive_command_thread = threading.Thread(
