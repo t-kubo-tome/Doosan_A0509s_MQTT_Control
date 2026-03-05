@@ -686,26 +686,32 @@ class Doosan_CON:
                 # 移動平均フィルタのセットアップ（t_intv秒間隔）
                 if filter_kind == "original":
                     self.last_control = state
-                    _filter = SMAFilter(n_windows=n_windows)
-                    _filter.reset(state)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
+                    self._filter = SMAFilter(n_windows=n_windows)
+                    self._filter.reset(state)
                 elif filter_kind == "target":
-                    _filter = SMAFilter(n_windows=n_windows)
-                    _filter.reset(target)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
+                    self._filter = SMAFilter(n_windows=n_windows)
+                    self._filter.reset(target)
                 elif filter_kind == "filter_target_from_target_but_diff_from_control":
                     self.last_control = state
-                    _filter = SMAFilter(n_windows=n_windows)
-                    _filter.reset(target)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
+                    self._filter = SMAFilter(n_windows=n_windows)
+                    self._filter.reset(target)
                 elif filter_kind == "state_and_target_diff":
                     self.last_control = state
-                    _filter = SMAFilter(n_windows=n_windows)
-                    _filter.reset(state)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
+                    self._filter = SMAFilter(n_windows=n_windows)
+                    self._filter.reset(state)
                 elif filter_kind == "moveit_servo_humble":
-                    _filter = SMAFilter(n_windows=n_windows)
-                    _filter.reset(state)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
+                    self._filter = SMAFilter(n_windows=n_windows)
+                    self._filter.reset(state)
                 elif filter_kind == "control_and_target_diff":
                     self.last_control = state
-                    _filter = SMAFilter(n_windows=n_windows)
-                    _filter.reset(state)
+                    self.last_control_velocity = np.zeros(N_JOINTS)
+                    self._filter = SMAFilter(n_windows=n_windows)
+                    self._filter.reset(state)
                 elif filter_kind == "feedback_pd_traj":
                     N = N_JOINTS
                     Tf = t_intv * (N - 1)
@@ -714,16 +720,14 @@ class Doosan_CON:
                     Kd = 0.02
                     prev_error = np.zeros(N_JOINTS)
                     pd_step = 0
+                    self.last_control_velocity = np.zeros((N - 1, N_JOINTS))
                 elif filter_kind == "none":
                     self.last_control = state
+                    self.last_control_velocity = np.zeros(N_JOINTS)
 
                 # 速度制限をフィルタの手前にも入れてみる
                 self.last_target_delayed_velocity = np.zeros(N_JOINTS)
 
-                if filter_kind == "feedback_pd_traj":
-                    self.last_control_velocity = np.zeros((N - 1, N_JOINTS))
-                else:
-                    self.last_control_velocity = np.zeros(N_JOINTS)
                 continue
 
             sw.lap("Check stop")
@@ -793,16 +797,16 @@ class Doosan_CON:
                 # 成功している方法
                 # 速度制限済みの制御値で平滑化をしており、
                 # moveit servoなどでは見られない処理
-                target_filtered = _filter.predict_only(target_delayed)
+                target_filtered = self._filter.predict_only(target_delayed)
                 target_diff = target_filtered - self.last_control
             elif filter_kind == "target":
                 # 成功することもあるが平滑化窓を増やす必要あり
                 # 状態値を無視した目標値の値をロボットに送る
-                last_target_filtered = _filter.previous_filtered_measurement
-                target_filtered = _filter.filter(target_delayed)
+                last_target_filtered = self._filter.previous_filtered_measurement
+                target_filtered = self._filter.filter(target_delayed)
                 target_diff = target_filtered - last_target_filtered
             elif filter_kind == "filter_target_from_target_but_diff_from_control":
-                target_filtered = _filter.filter(target_delayed)
+                target_filtered = self._filter.filter(target_delayed)
                 target_diff = target_filtered - self.last_control
             elif filter_kind == "state_and_target_diff":
                 # 失敗する
@@ -818,8 +822,8 @@ class Doosan_CON:
                 # target_alignedは、stateとtargetが乖離するので不適切
                 target_diff = target_delayed - self.last_target_delayed
                 target_aligned = state + target_diff
-                last_target_filtered = _filter.previous_filtered_measurement
-                target_filtered = _filter.filter(target_aligned)
+                last_target_filtered = self._filter.previous_filtered_measurement
+                target_filtered = self._filter.filter(target_aligned)
                 target_diff = target_filtered - last_target_filtered
             elif filter_kind == "moveit_servo_humble":
                 # 失敗する
@@ -833,8 +837,8 @@ class Doosan_CON:
                 # などの理由からt_intv秒で移動できる距離以上になってしまうため
                 target_diff = target_delayed - self.last_target_delayed
                 target_aligned = state + target_diff
-                last_target_filtered = _filter.previous_filtered_measurement
-                target_filtered = _filter.filter(target_aligned)
+                last_target_filtered = self._filter.previous_filtered_measurement
+                target_filtered = self._filter.filter(target_aligned)
                 target_diff = target_filtered - state
             elif filter_kind == "control_and_target_diff":
                 # 失敗する
@@ -844,8 +848,8 @@ class Doosan_CON:
                 # moveit_servo_mainの処理に近い
                 target_diff = target_delayed - self.last_target_delayed
                 target_aligned = self.last_control + target_diff
-                last_target_filtered = _filter.previous_filtered_measurement
-                target_filtered = _filter.filter(target_aligned)
+                last_target_filtered = self._filter.previous_filtered_measurement
+                target_filtered = self._filter.filter(target_aligned)
                 target_diff = target_filtered - last_target_filtered
             elif filter_kind == "feedback_pd_traj":
                 if pd_step == 0:
@@ -948,7 +952,7 @@ class Doosan_CON:
             if filter_kind == "original":
                 control = self.last_control + target_diff_speed_limited
                 # 登録するだけ
-                _filter.filter(control)
+                self._filter.filter(control)
             elif filter_kind == "target":
                 control = last_target_filtered + target_diff_speed_limited
             elif filter_kind == "filter_target_from_target_but_diff_from_control":
