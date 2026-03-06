@@ -765,6 +765,7 @@ class Doosan_CON:
             first_accel_max_ratio = None
 
             target_diff = target_delayed - self.last_target_delayed
+
             dt = now - self.last
             v = target_diff / dt
 
@@ -787,15 +788,16 @@ class Doosan_CON:
                 target_diff_speed_limited = v * dt
                 first_accel_max_ratio = accel_max_ratio
 
-                # 速度がしきい値より小さければ静止させ無駄なドリフトを避ける
-                # NOTE: スレーブモードを落とさないためには前の速度が十分小さいとき (しきい値は不明) 
-                # にしか静止させてはいけない
-                if np.all(target_diff_speed_limited / dt < stopped_velocity_eps):
-                    target_diff_speed_limited = np.zeros_like(
-                        target_diff_speed_limited)
-                    v = target_diff_speed_limited / dt
+                target_diff = target_diff_speed_limited
 
-                target_delayed = self.last_target_delayed + target_diff_speed_limited
+            # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
+            # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
+            # スレーブモードを正常に解除するためにも必要
+            if np.all(v < stopped_velocity_eps):
+                target_diff = np.zeros(N_JOINTS)
+                v = np.zeros(N_JOINTS)
+
+            target_delayed = self.last_target_delayed + target_diff
 
             self.last_target_delayed_velocity = v
             self.last_target_delayed = target_delayed
@@ -897,9 +899,9 @@ class Doosan_CON:
                     vs_ = vs_[0][None, :] + np.cumsum(as_, axis=0) * dt
 
                     target_diffs_speed_limited = vs_ * dt
-                    # 速度がしきい値より小さければ静止させ無駄なドリフトを避ける
-                    # NOTE: スレーブモードを落とさないためには前の速度が十分小さいとき (しきい値は不明) 
-                    # にしか静止させてはいけない
+                    # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
+                    # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
+                    # スレーブモードを正常に解除するためにも必要
                     for i in range(N - 1):
                         if np.all(target_diffs_speed_limited[i] / dt < stopped_velocity_eps):
                             target_diffs_speed_limited[i] = np.zeros_like(
@@ -924,11 +926,12 @@ class Doosan_CON:
             sw.lap("2nd speed limit")
             max_ratio = None
             accel_max_ratio = None
-            if use_second_speed_limit:
-                if filter_kind != "feedback_pd_traj":
+            if filter_kind != "feedback_pd_traj":
+                dt = now - self.last
+                v = target_diff / dt
+
+                if use_second_speed_limit:
                     # 速度制限
-                    dt = now - self.last
-                    v = target_diff / dt
                     ratio = np.abs(v) / (speed_limit_ratio * speed_limits)
                     max_ratio = np.max(ratio)
                     if max_ratio > 1:
@@ -944,39 +947,38 @@ class Doosan_CON:
                     v = self.last_control_velocity + a * dt
                     target_diff_speed_limited = v * dt
 
-                    # 速度がしきい値より小さければ静止させ無駄なドリフトを避ける
-                    # NOTE: スレーブモードを落とさないためには前の速度が十分小さいとき (しきい値は不明) 
-                    # にしか静止させてはいけない
-                    if np.all(target_diff_speed_limited / dt < stopped_velocity_eps):
-                        target_diff_speed_limited = np.zeros_like(
-                            target_diff_speed_limited)
-                        v = target_diff_speed_limited / dt
+                    target_diff = target_diff_speed_limited
 
-                    self.last_control_velocity = v
-            else:
-                target_diff_speed_limited = target_diff
+                # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
+                # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
+                # スレーブモードを正常に解除するためにも必要
+                if np.all(v < stopped_velocity_eps):
+                    target_diff = np.zeros(N_JOINTS)
+                    v = np.zeros(N_JOINTS)
+
+                self.last_control_velocity = v
 
             sw.lap("Get control")
             # 平滑化の種類による対応
             if filter_kind == "original":
-                control = self.last_control + target_diff_speed_limited
+                control = self.last_control + target_diff
                 # 登録するだけ
                 self._filter.filter(control)
             elif filter_kind == "target":
-                control = last_target_filtered + target_diff_speed_limited
+                control = last_target_filtered + target_diff
             elif filter_kind == "filter_target_from_target_but_diff_from_control":
                 # 前回制御値との差分を実機はモニタするので、これに対して速度制限をかけることが重要
-                control = self.last_control + target_diff_speed_limited
+                control = self.last_control + target_diff
             elif filter_kind == "state_and_target_diff":
-                control = last_target_filtered + target_diff_speed_limited
+                control = last_target_filtered + target_diff
             elif filter_kind == "moveit_servo_humble":
-                control = state + target_diff_speed_limited
+                control = state + target_diff
             elif filter_kind == "control_and_target_diff":
-                control = last_target_filtered + target_diff_speed_limited
+                control = last_target_filtered + target_diff
             elif filter_kind == "feedback_pd_traj":
                 control = target_step_speed_limited
             elif filter_kind == "none":
-                control = self.last_control + target_diff_speed_limited
+                control = self.last_control + target_diff
             else:
                 raise ValueError
 
