@@ -756,11 +756,13 @@ class Doosan_CON:
             # 速度制限をフィルタの手前にも入れてみる
             first_max_ratio = None
             first_accel_max_ratio = None
+
+            target_diff = target_delayed - self.last_target_delayed
+            dt = now - self.last
+            v = target_diff / dt
+
             if use_first_speed_limit:
-                target_diff = target_delayed - self.last_target_delayed
                 # 速度制限
-                dt = now - self.last
-                v = target_diff / dt
                 ratio = np.abs(v) / (speed_limit_ratio * speed_limits)
                 max_ratio = np.max(ratio)
                 if max_ratio > 1:
@@ -786,9 +788,9 @@ class Doosan_CON:
                         target_diff_speed_limited)
                     v = target_diff_speed_limited / dt
 
-                self.last_target_delayed_velocity = v
                 target_delayed = self.last_target_delayed + target_diff_speed_limited
 
+            self.last_target_delayed_velocity = v
             self.last_target_delayed = target_delayed
 
             sw.lap("Get filtered target")
