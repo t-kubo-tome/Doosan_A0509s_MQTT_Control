@@ -105,6 +105,8 @@ use_second_speed_limit = True
 control_interface: Literal["position", "velocity"] = "velocity"
 save_control = SAVE
 use_normalize_target_to_nearest = True
+delay_for_interpolation = 0.1
+
 
 class Doosan_CON:
     def __init__(self):
@@ -683,7 +685,7 @@ class Doosan_CON:
 
                 # 目標値を遅延を許して極力線形補間するためのセットアップ
                 if use_interp:
-                    di = DelayedInterpolator(delay=0.1)
+                    di = DelayedInterpolator(delay=delay_for_interpolation)
                     di.reset(now, target)
                     target_delayed = di.read(now, target)
                 else:
