@@ -571,25 +571,24 @@ class Doosan_CON:
         while True:
             sw.start("Get shared memory")
             now = time.time()
+            # 各ステップ開始時のロボット固有の処理
             self.on_step_start_in_control_loop()
 
-            # ハンドの制御が止まった場合はアームの制御も止める
+            # ハンドの制御が止まった場合はアームの制御を即座に止める
             if not hand_thread.is_alive():
                 break
 
             # ユーザーが停止を要求した場合
-            # ロボットに制御値を送る前後でアームの制御の止め方が変わる
             stop = self.shm.stop_realtime_control
 
             # 状態値を取得しているかを確認
             if self.shm.is_joint_state_received != 1:
+                # ロボットに制御値を送る前の停止判定
                 if self.stop_by_user_or_emergency_before_sending_control(
                     stop, stop_event, error_event, lock, error_info
                 ):
                     break
-                # 制御の滑らかさ評価で、予め決められた時間ごとの角度（= 軌道）を
-                # targetとして使用する場合、以下で待ちすぎると最初に取得される
-                # targetがstateから大きく離れ、ガッとロボットが動くので、短い時間だけ待つ
+                # NOTE: 目標値の生成時に状態値を常に参照しない場合短い周期で確認しズレ防止
                 time.sleep(t_intv)
                 continue
 
@@ -598,13 +597,12 @@ class Doosan_CON:
 
             # 目標値を取得しているかを確認
             if self.shm.is_joint_target_received != 1:
+                # ロボットに制御値を送る前の停止判定
                 if self.stop_by_user_or_emergency_before_sending_control(
                     stop, stop_event, error_event, lock, error_info
                 ):
                     break
-                # 制御の滑らかさ評価で、予め決められた時間ごとの角度（= 軌道）を
-                # targetとして使用する場合、以下で待ちすぎると最初に取得される
-                # targetがstateから大きく離れ、ガッとロボットが動くので、短い時間だけ待つ
+                # NOTE: 目標値の生成時に状態値を常に参照しない場合短い周期で確認しズレ防止
                 time.sleep(t_intv)
                 continue
 
@@ -626,7 +624,7 @@ class Doosan_CON:
             # 実機との比較をし、実機側で制限値を超えることがないようにする必要がある。
             # あるいは目標値の角度範囲が実機と一致するようにするようきちんと
             # モデル化すればそもそも以下の処理は不要である。
-            # とりあえず急に動こうとすれば止まる仕組みは入れている
+            # なおとりあえず急に動こうとすれば止まる仕組みは入れている
             target_norm = target
             if use_normalize_target_to_nearest:
                 target_norm = state + (target - state + 180) % 360 - 180
@@ -642,25 +640,33 @@ class Doosan_CON:
             target = target_th
 
             # 目標値が状態値から大きく離れた場合
-            # すでに目標値を受け取っていない場合はすぐに、
-            # 目標値を受け取っている場合は前回の目標値からも大きく離れた場合に停止させる
-            if (
-                (np.abs(target - state) > 
-                target_state_abs_joint_diff_limit).any()
-            ) and (
-                last_target is None or
-                (np.abs(target - last_target) > 
-                target_state_abs_joint_diff_limit).any()
-            ):
-                # 強制停止する。強制停止しないとエラーメッセージを返すのが複雑になる
-                msg = f"Target and state are too different. State: {state}, Target: {target}, Last target: {last_target}, Diff limit: {target_state_abs_joint_diff_limit}"
-                with lock:
-                    error_info['kind'] = "robot"
-                    error_info['msg'] = msg
-                    error_info['exception'] = ValueError(msg)
-                error_event.set()
-                stop_event.set()
-                break
+            if (np.abs(target - state) > 
+                target_state_abs_joint_diff_limit).any():
+                # NOTE: まだ目標値を受け取っていない場合か、
+                # すでに目標値を受け取っていて前回の目標値からも大きく離れていた場合のみ、
+                # 停止させる
+                # それ以外の場合は、目標値に比べて制御値、状態値の追従が遅れているだけで
+                # ありえるので停止させない
+                # VR側との同期方法が改善されれば不要な処理になる可能性あり
+                if (
+                    last_target is None or
+                    (np.abs(target - last_target) > 
+                    target_state_abs_joint_diff_limit).any()
+                ):
+                    # 強制停止する。ゆるやかな停止ではエラーの返し方が複雑になるため
+                    msg = "Target and state are too different.\n"
+                    msg += "| Joint  | Target | State  | Diff   | Limit  |\n"
+                    msg += "| ------ | ------ | ------ | ------ | ------ |\n"
+                    for i in range(N_JOINTS):
+                        if abs(target[i] - state[i]) > target_state_abs_joint_diff_limit[i]:
+                            msg += f"| {i: <6d} | {target[i]: <6.1f} | {state[i]: <6.1f} | {abs(target[i] - state[i]): <6.1f} | {target_state_abs_joint_diff_limit[i]: <6.1f} |\n"
+                    with lock:
+                        error_info['kind'] = "robot"
+                        error_info['msg'] = msg
+                        error_info['exception'] = ValueError(msg)
+                    error_event.set()
+                    stop_event.set()
+                    break
 
             last_target = target
 
@@ -669,6 +675,7 @@ class Doosan_CON:
                 self.logger.info("Start sending control command")
                 self.last = now
 
+                # ロボットに制御値を送る前の停止判定
                 if self.stop_by_user_or_emergency_before_sending_control(
                     stop, stop_event, error_event, lock, error_info
                 ):
