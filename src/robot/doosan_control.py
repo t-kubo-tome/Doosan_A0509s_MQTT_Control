@@ -61,8 +61,10 @@ filter_kind: Literal[
 ] = "filter_target_from_target_but_diff_from_control"  # "original"
 speed_limits = np.array([180, 180, 180, 360, 360, 360])
 speed_limit_ratio = 0.5
+eff_speed_limits = speed_limits * speed_limit_ratio
 accel_limits = speed_limits ** 2
 accel_limit_ratio = 0.5
+eff_accel_limits = accel_limits * accel_limit_ratio
 stopped_velocity_eps = 1e-4
 servo_mode = 0x202
 use_interp = True
@@ -544,6 +546,279 @@ class Doosan_CON:
             return True
         return False
 
+    def speed_limit(
+        self,
+        dt: float,
+        v: np.ndarray,
+        v_last: np.ndarray,
+        v_limits: np.ndarray,
+        a_limits: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, float, float]:
+        # 速度制限
+        ratio = np.abs(v) / v_limits
+        max_ratio = np.max(ratio)
+        if max_ratio > 1:
+            v /= max_ratio
+
+        # 加速度制限
+        a = (v - v_last) / dt
+        accel_ratio = np.abs(a) / a_limits
+        accel_max_ratio = np.max(accel_ratio)
+        if accel_max_ratio > 1:
+            a /= accel_max_ratio
+        v = v_last + a * dt
+
+        return v, max_ratio, accel_max_ratio
+
+    def try_first_speed_limit(
+        self, target_diff: np.ndarray, dt: float, use_first_speed_limit: bool,
+    ) -> tuple[np.ndarray, float, float]:
+        first_max_ratio = -1
+        first_accel_max_ratio = -1
+
+        v = target_diff / dt
+
+        if use_first_speed_limit:
+            v, first_max_ratio, first_accel_max_ratio = self.speed_limit(
+                dt, v, self.last_target_delayed_velocity,
+                eff_speed_limits, eff_accel_limits,
+            )
+            target_diff = v * dt
+
+        # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
+        # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
+        # スレーブモードを正常に解除するためにも必要
+        if np.all(v < stopped_velocity_eps):
+            target_diff = np.zeros(N_JOINTS)
+            v = np.zeros(N_JOINTS)
+
+        self.last_target_delayed_velocity = v
+
+        return target_diff, first_max_ratio, first_accel_max_ratio
+
+    def try_second_speed_limit(
+        self,
+        target_diff: np.ndarray,
+        dt: float,
+        use_second_speed_limit: bool,
+        filter_kind: str,
+    ) -> tuple[np.ndarray, float, float]:
+        if filter_kind == "feedback_pd_traj":
+            return target_diff, -1, -1
+        max_ratio = -1
+        accel_max_ratio = -1
+        
+        v = target_diff / dt
+
+        if use_second_speed_limit:
+            v, max_ratio, accel_max_ratio = self.speed_limit(
+                dt, v, self.last_control_velocity,
+                eff_speed_limits, eff_accel_limits,
+            )
+            target_diff = v * dt
+
+        # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
+        # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
+        # スレーブモードを正常に解除するためにも必要
+        if np.all(v < stopped_velocity_eps):
+            target_diff = np.zeros(N_JOINTS)
+            v = np.zeros(N_JOINTS)
+
+        self.last_control_velocity = v
+        return target_diff, max_ratio, accel_max_ratio
+
+    def init_filter(
+        self,
+        filter_kind: str,
+        n_windows: int, 
+        state: np.ndarray,
+        target: np.ndarray,
+    ) -> None:
+        if filter_kind == "original":
+            self._filter = SMAFilter(n_windows=n_windows)
+            self._filter.reset(state)
+        elif filter_kind == "target":
+            self._filter = SMAFilter(n_windows=n_windows)
+            self._filter.reset(target)
+        elif filter_kind == "filter_target_from_target_but_diff_from_control":
+            self._filter = SMAFilter(n_windows=n_windows)
+            self._filter.reset(target)
+        elif filter_kind == "state_and_target_diff":
+            self._filter = SMAFilter(n_windows=n_windows)
+            self._filter.reset(state)
+        elif filter_kind == "moveit_servo_humble":
+            self._filter = SMAFilter(n_windows=n_windows)
+            self._filter.reset(state)
+        elif filter_kind == "control_and_target_diff":
+            self._filter = SMAFilter(n_windows=n_windows)
+            self._filter.reset(state)
+        elif filter_kind == "feedback_pd_traj":
+            N = N_JOINTS
+            Tf = t_intv * (N - 1)
+            method = 5
+            Kp = 0.6
+            Kd = 0.02
+            prev_error = np.zeros(N_JOINTS)
+            pd_step = 0
+            self._filter_params = {
+                "N": N,
+                "Tf": Tf,
+                "method": method,
+                "Kp": Kp,
+                "Kd": Kd,
+                "prev_error": prev_error,
+                "pd_step": pd_step,
+                "last_control_velocity": np.zeros((N - 1, N_JOINTS)),
+            }
+        elif filter_kind == "none":
+            pass
+
+    def try_filter(
+        self, target_delayed: np.ndarray, state: np.ndarray, filter_kind: str,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        # 平滑化
+        if filter_kind == "filter_target_from_target_but_diff_from_control":
+            # 成功している方法
+            target_filtered = self._filter.filter(target_delayed)
+            target_filtered_base = self.last_control
+            target_diff = target_filtered - target_filtered_base
+        elif filter_kind == "original":
+            # 成功している方法
+            # 速度制限済みの制御値で平滑化をしており、
+            # moveit servoなどでは見られない処理
+            target_filtered = self._filter.predict_only(target_delayed)
+            target_filtered_base = self.last_control
+            target_diff = target_filtered - target_filtered_base
+        elif filter_kind == "target":
+            # 成功することもあるが平滑化窓を増やす必要あり
+            # 状態値を無視した目標値の値をロボットに送る
+            last_target_filtered = self._filter.previous_filtered_measurement
+            target_filtered = self._filter.filter(target_delayed)
+            target_filtered_base = last_target_filtered
+            target_diff = target_filtered - target_filtered_base
+        elif filter_kind == "state_and_target_diff":
+            # 失敗する
+            # 状態値に目標値の差分を足したものを平滑化する
+            # moveit servo (少なくともhumble版)ではこのようにしているが、
+            # 速度がどんどん大きくなっていって（正のフィードバック）
+            # 制限に引っかかる
+            # stateを含む移動平均を取ると、stateが速度を持つと
+            # その速度を保持し続けようとするので、そこに差分を足すと
+            # どんどん加速していくのでは。
+            # 遅延があることも影響しているかも。
+            # NOTE(20250813): targetがstateのフィードバックを受けていない場合は
+            # target_alignedは、stateとtargetが乖離するので不適切
+            target_diff = target_delayed - self.last_target_delayed
+            target_aligned = state + target_diff
+            last_target_filtered = self._filter.previous_filtered_measurement
+            target_filtered = self._filter.filter(target_aligned)
+            target_filtered_base = last_target_filtered
+            target_diff = target_filtered - target_filtered_base
+        elif filter_kind == "moveit_servo_humble":
+            # 失敗する
+            # 停止はしないがかなりゆっくり動き、目標軌跡も追従しなくなる
+            # v = (target_filtered - state) / t_intv
+            # target_filteredとstateの差は、
+            # - 制御値を送ってからその値にstateがなるまで0.1s程度の遅延があること
+            # - テストなどであらかじめ決まっているtargetを逐次送り、
+            #   targetの速度がロボットの速度制限より大きいとき、
+            #   targetがstateからどんどん離れていくこと
+            # などの理由からt_intv秒で移動できる距離以上になってしまうため
+            target_diff = target_delayed - self.last_target_delayed
+            target_aligned = state + target_diff
+            last_target_filtered = self._filter.previous_filtered_measurement
+            target_filtered = self._filter.filter(target_aligned)
+            target_filtered_base = state
+            target_diff = target_filtered - target_filtered_base
+        elif filter_kind == "control_and_target_diff":
+            # 失敗する
+            # 速度制限にひっかかり途中停止する
+            # 制御値に目標値の差分を足したものを平滑化する
+            # 上記と同様に正のフィードバック的になっている
+            # moveit_servo_mainの処理に近い
+            target_diff = target_delayed - self.last_target_delayed
+            target_aligned = self.last_control + target_diff
+            last_target_filtered = self._filter.previous_filtered_measurement
+            target_filtered = self._filter.filter(target_aligned)
+            target_filtered_base = last_target_filtered
+            target_diff = target_filtered - target_filtered_base
+        elif filter_kind == "feedback_pd_traj":
+            N = self._filter_params["N"]
+            Tf = self._filter_params["Tf"]
+            method = self._filter_params["method"]
+            Kp = self._filter_params["Kp"]
+            Kd = self._filter_params["Kd"]
+            prev_error = self._filter_params["prev_error"]
+            pd_step = self._filter_params["pd_step"]
+            last_control_velocity = self._filter_params["last_control_velocity"]
+            if pd_step == 0:
+                error = target_delayed - state
+                d_error = (error - prev_error) / Tf
+                mse = np.mean(error ** 2)
+                target_goal = state + Kp * error + Kd * d_error
+                prev_error = error
+                self._filter_params["prev_error"] = prev_error
+                target_steps = mr.JointTrajectory(
+                    state.tolist(),
+                    target_goal.tolist(),
+                    Tf,
+                    N,
+                    method,
+                )
+                # 速度制限
+                dt = t_intv
+                # [N - 1, N_JOINTS]
+                target_diffs = np.diff(target_steps, axis=0)
+                vs = target_diffs / dt
+                ratios = np.abs(vs) / (speed_limit_ratio * speed_limits)[None, :]
+                max_ratio = np.max(ratios)
+                if max_ratio > 1:
+                    vs /= max_ratio
+
+                # 加速度制限
+                # [N, N_JOINTS]
+                vs_ = np.concatenate([last_control_velocity[[-1], :], vs], axis=0)
+                # [N - 1, N_JOINTS]
+                as_ = np.diff(vs_, axis=0) / dt
+                accel_ratios = np.abs(as_) / (accel_limit_ratio * accel_limits)[None, :]
+                accel_max_ratio = np.max(accel_ratios)
+                if accel_max_ratio > 1:
+                    as_ /= accel_max_ratio
+                # [N - 1, N_JOINTS]
+                vs_ = vs_[0][None, :] + np.cumsum(as_, axis=0) * dt
+
+                target_diffs_speed_limited = vs_ * dt
+                # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
+                # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
+                # スレーブモードを正常に解除するためにも必要
+                for i in range(N - 1):
+                    if np.all(target_diffs_speed_limited[i] / dt < stopped_velocity_eps):
+                        target_diffs_speed_limited[i] = np.zeros_like(
+                            target_diffs_speed_limited[i])
+                        vs_[i] = target_diffs_speed_limited[i] / dt
+
+                # [N - 1, N_JOINTS]
+                target_steps_speed_limited = target_steps[0][None, :] + np.cumsum(vs_, axis=0) * dt
+                last_control_velocity = vs_
+                self._filter_params["last_control_velocity"] = last_control_velocity
+
+            target_filtered = target_steps_speed_limited[pd_step]
+            target_filtered_base = target_filtered
+            target_diff = np.zeros(N_JOINTS)
+
+            # Next step
+            pd_step += 1
+            if pd_step == N - 1:
+                pd_step = 0
+            self._filter_params["pd_step"] = pd_step
+        elif filter_kind == "none":
+            target_filtered = target_delayed
+            target_filtered_base = self.last_control
+            target_diff = target_filtered - target_filtered_base
+        else:
+            raise ValueError
+        return target_diff, target_filtered, target_filtered_base
+
     def control_loop(self, f: TextIO | None = None) -> bool:
         """リアルタイム制御ループ"""
         # ロボット固有の処理を含まない
@@ -570,9 +845,11 @@ class Doosan_CON:
         )
         hand_thread.start()
 
+        # アームの制御ループ
         while True:
             sw.start("Get shared memory")
             now = time.time()
+            dt = now - self.last
             # 各ステップ開始時のロボット固有の処理
             self.on_step_start_in_control_loop()
 
@@ -613,6 +890,7 @@ class Doosan_CON:
             # 関節の目標値
             target = self.shm.joint_target.copy()
 
+            # 目標値のチェック
             sw.lap("Check target")
             target_raw = target
 
@@ -672,6 +950,7 @@ class Doosan_CON:
 
             last_target = target
 
+            # 最初の目標値を受け取ったときの処理
             sw.lap("First target")
             if self.last == 0:
                 self.logger.info("Start sending control command")
@@ -691,52 +970,16 @@ class Doosan_CON:
                 else:
                     target_delayed = target
                 self.last_target_delayed = target_delayed
-                
-                # 移動平均フィルタのセットアップ（t_intv秒間隔）
-                if filter_kind == "original":
-                    self.last_control = state
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-                    self._filter = SMAFilter(n_windows=n_windows)
-                    self._filter.reset(state)
-                elif filter_kind == "target":
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-                    self._filter = SMAFilter(n_windows=n_windows)
-                    self._filter.reset(target)
-                elif filter_kind == "filter_target_from_target_but_diff_from_control":
-                    self.last_control = state
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-                    self._filter = SMAFilter(n_windows=n_windows)
-                    self._filter.reset(target)
-                elif filter_kind == "state_and_target_diff":
-                    self.last_control = state
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-                    self._filter = SMAFilter(n_windows=n_windows)
-                    self._filter.reset(state)
-                elif filter_kind == "moveit_servo_humble":
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-                    self._filter = SMAFilter(n_windows=n_windows)
-                    self._filter.reset(state)
-                elif filter_kind == "control_and_target_diff":
-                    self.last_control = state
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-                    self._filter = SMAFilter(n_windows=n_windows)
-                    self._filter.reset(state)
-                elif filter_kind == "feedback_pd_traj":
-                    N = N_JOINTS
-                    Tf = t_intv * (N - 1)
-                    method = 5
-                    Kp = 0.6
-                    Kd = 0.02
-                    prev_error = np.zeros(N_JOINTS)
-                    pd_step = 0
-                    self.last_control_velocity = np.zeros((N - 1, N_JOINTS))
-                elif filter_kind == "none":
-                    self.last_control = state
-                    self.last_control_velocity = np.zeros(N_JOINTS)
-
-                # 速度制限をフィルタの手前にも入れてみる
                 self.last_target_delayed_velocity = np.zeros(N_JOINTS)
 
+                # 制御値の初期化
+                self.last_control = state
+                self.last_control_velocity = np.zeros(N_JOINTS)
+
+                # 移動平均フィルタのセットアップ
+                self.init_filter(filter_kind, n_windows, state, target)
+
+                # 最初の目標値を受け取ったときは制御値は送らない
                 continue
 
             sw.lap("Check stop")
@@ -762,233 +1005,36 @@ class Doosan_CON:
             target_delayed_raw = target_delayed
 
             sw.lap("1st speed limit")
-            # 速度制限をフィルタの手前にも入れてみる
-            first_max_ratio = None
-            first_accel_max_ratio = None
-
+            # 速度制限を平滑化の前に入れ、制限された速度のスケールで平滑化できるようにする
             target_diff = target_delayed - self.last_target_delayed
-
-            dt = now - self.last
-            v = target_diff / dt
-
-            if use_first_speed_limit:
-                # 速度制限
-                ratio = np.abs(v) / (speed_limit_ratio * speed_limits)
-                max_ratio = np.max(ratio)
-                if max_ratio > 1:
-                    v /= max_ratio
-                target_diff_speed_limited = v * dt
-                first_max_ratio = max_ratio
-
-                # 加速度制限
-                a = (v - self.last_target_delayed_velocity) / dt
-                accel_ratio = np.abs(a) / (accel_limit_ratio * accel_limits)
-                accel_max_ratio = np.max(accel_ratio)
-                if accel_max_ratio > 1:
-                    a /= accel_max_ratio
-                v = self.last_target_delayed_velocity + a * dt
-                target_diff_speed_limited = v * dt
-                first_accel_max_ratio = accel_max_ratio
-
-                target_diff = target_diff_speed_limited
-
-            # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
-            # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
-            # スレーブモードを正常に解除するためにも必要
-            if np.all(v < stopped_velocity_eps):
-                target_diff = np.zeros(N_JOINTS)
-                v = np.zeros(N_JOINTS)
-
+            target_diff, first_max_ratio, first_accel_max_ratio = \
+                self.try_first_speed_limit(
+                    target_diff, dt, use_first_speed_limit)
             target_delayed = self.last_target_delayed + target_diff
-
-            self.last_target_delayed_velocity = v
             self.last_target_delayed = target_delayed
 
             sw.lap("Get filtered target")
-            # 平滑化
-            if filter_kind == "original":
-                # 成功している方法
-                # 速度制限済みの制御値で平滑化をしており、
-                # moveit servoなどでは見られない処理
-                target_filtered = self._filter.predict_only(target_delayed)
-                target_diff = target_filtered - self.last_control
-            elif filter_kind == "target":
-                # 成功することもあるが平滑化窓を増やす必要あり
-                # 状態値を無視した目標値の値をロボットに送る
-                last_target_filtered = self._filter.previous_filtered_measurement
-                target_filtered = self._filter.filter(target_delayed)
-                target_diff = target_filtered - last_target_filtered
-            elif filter_kind == "filter_target_from_target_but_diff_from_control":
-                target_filtered = self._filter.filter(target_delayed)
-                target_diff = target_filtered - self.last_control
-            elif filter_kind == "state_and_target_diff":
-                # 失敗する
-                # 状態値に目標値の差分を足したものを平滑化する
-                # moveit servo (少なくともhumble版)ではこのようにしているが、
-                # 速度がどんどん大きくなっていって（正のフィードバック）
-                # 制限に引っかかる
-                # stateを含む移動平均を取ると、stateが速度を持つと
-                # その速度を保持し続けようとするので、そこに差分を足すと
-                # どんどん加速していくのでは。
-                # 遅延があることも影響しているかも。
-                # NOTE(20250813): targetがstateのフィードバックを受けていない場合は
-                # target_alignedは、stateとtargetが乖離するので不適切
-                target_diff = target_delayed - self.last_target_delayed
-                target_aligned = state + target_diff
-                last_target_filtered = self._filter.previous_filtered_measurement
-                target_filtered = self._filter.filter(target_aligned)
-                target_diff = target_filtered - last_target_filtered
-            elif filter_kind == "moveit_servo_humble":
-                # 失敗する
-                # 停止はしないがかなりゆっくり動き、目標軌跡も追従しなくなる
-                # v = (target_filtered - state) / t_intv
-                # target_filteredとstateの差は、
-                # - 制御値を送ってからその値にstateがなるまで0.1s程度の遅延があること
-                # - テストなどであらかじめ決まっているtargetを逐次送り、
-                #   targetの速度がロボットの速度制限より大きいとき、
-                #   targetがstateからどんどん離れていくこと
-                # などの理由からt_intv秒で移動できる距離以上になってしまうため
-                target_diff = target_delayed - self.last_target_delayed
-                target_aligned = state + target_diff
-                last_target_filtered = self._filter.previous_filtered_measurement
-                target_filtered = self._filter.filter(target_aligned)
-                target_diff = target_filtered - state
-            elif filter_kind == "control_and_target_diff":
-                # 失敗する
-                # 速度制限にひっかかり途中停止する
-                # 制御値に目標値の差分を足したものを平滑化する
-                # 上記と同様に正のフィードバック的になっている
-                # moveit_servo_mainの処理に近い
-                target_diff = target_delayed - self.last_target_delayed
-                target_aligned = self.last_control + target_diff
-                last_target_filtered = self._filter.previous_filtered_measurement
-                target_filtered = self._filter.filter(target_aligned)
-                target_diff = target_filtered - last_target_filtered
-            elif filter_kind == "feedback_pd_traj":
-                if pd_step == 0:
-                    error = target_delayed - state
-                    d_error = (error - prev_error) / Tf
-                    mse = np.mean(error ** 2)
-                    target_goal = state + Kp * error + Kd * d_error
-                    prev_error = error
-                    target_steps = mr.JointTrajectory(
-                        state.tolist(),
-                        target_goal.tolist(),
-                        Tf,
-                        N,
-                        method,
-                    )
-                    # 速度制限
-                    dt = t_intv
-                    # [N - 1, N_JOINTS]
-                    target_diffs = np.diff(target_steps, axis=0)
-                    vs = target_diffs / dt
-                    ratios = np.abs(vs) / (speed_limit_ratio * speed_limits)[None, :]
-                    max_ratio = np.max(ratios)
-                    if max_ratio > 1:
-                        vs /= max_ratio
-
-                    # 加速度制限
-                    # [N, N_JOINTS]
-                    vs_ = np.concatenate([self.last_control_velocity[[-1], :], vs], axis=0)
-                    # [N - 1, N_JOINTS]
-                    as_ = np.diff(vs_, axis=0) / dt
-                    accel_ratios = np.abs(as_) / (accel_limit_ratio * accel_limits)[None, :]
-                    accel_max_ratio = np.max(accel_ratios)
-                    if accel_max_ratio > 1:
-                        as_ /= accel_max_ratio
-                    # [N - 1, N_JOINTS]
-                    vs_ = vs_[0][None, :] + np.cumsum(as_, axis=0) * dt
-
-                    target_diffs_speed_limited = vs_ * dt
-                    # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
-                    # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
-                    # スレーブモードを正常に解除するためにも必要
-                    for i in range(N - 1):
-                        if np.all(target_diffs_speed_limited[i] / dt < stopped_velocity_eps):
-                            target_diffs_speed_limited[i] = np.zeros_like(
-                                target_diffs_speed_limited[i])
-                            vs_[i] = target_diffs_speed_limited[i] / dt
-
-                    # [N - 1, N_JOINTS]
-                    target_steps_speed_limited = target_steps[0][None, :] + np.cumsum(vs_, axis=0) * dt
-                    self.last_control_velocity = vs_
-
-                target_step_speed_limited = target_steps_speed_limited[pd_step]
-
-                # Next step
-                pd_step += 1
-                if pd_step == N - 1:
-                    pd_step = 0
-            elif filter_kind == "none":
-                target_diff = target_delayed - self.last_control
-            else:
-                raise ValueError
+            # 平滑化を行う
+            target_diff, target_filtered, target_filtered_base = \
+                self.try_filter(target_delayed, state, filter_kind)
 
             sw.lap("2nd speed limit")
-            max_ratio = None
-            accel_max_ratio = None
-            if filter_kind != "feedback_pd_traj":
-                dt = now - self.last
-                v = target_diff / dt
-
-                if use_second_speed_limit:
-                    # 速度制限
-                    ratio = np.abs(v) / (speed_limit_ratio * speed_limits)
-                    max_ratio = np.max(ratio)
-                    if max_ratio > 1:
-                        v /= max_ratio
-                    target_diff_speed_limited = v * dt
-
-                    # 加速度制限
-                    a = (v - self.last_control_velocity) / dt
-                    accel_ratio = np.abs(a) / (accel_limit_ratio * accel_limits)
-                    accel_max_ratio = np.max(accel_ratio)
-                    if accel_max_ratio > 1:
-                        a /= accel_max_ratio
-                    v = self.last_control_velocity + a * dt
-                    target_diff_speed_limited = v * dt
-
-                    target_diff = target_diff_speed_limited
-
-                # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
-                # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
-                # スレーブモードを正常に解除するためにも必要
-                if np.all(v < stopped_velocity_eps):
-                    target_diff = np.zeros(N_JOINTS)
-                    v = np.zeros(N_JOINTS)
-
-                self.last_control_velocity = v
+            # 制御値が速度制限されたものであることを保証する
+            target_diff, max_ratio, accel_max_ratio = \
+                self.try_second_speed_limit(
+                    target_diff, dt, use_second_speed_limit, filter_kind)
 
             sw.lap("Get control")
-            # 平滑化の種類による対応
+            # 制御値を生成する
+            control = target_filtered_base + target_diff
             if filter_kind == "original":
-                control = self.last_control + target_diff
-                # 登録するだけ
                 self._filter.filter(control)
-            elif filter_kind == "target":
-                control = last_target_filtered + target_diff
-            elif filter_kind == "filter_target_from_target_but_diff_from_control":
-                # 前回制御値との差分を実機はモニタするので、これに対して速度制限をかけることが重要
-                control = self.last_control + target_diff
-            elif filter_kind == "state_and_target_diff":
-                control = last_target_filtered + target_diff
-            elif filter_kind == "moveit_servo_humble":
-                control = state + target_diff
-            elif filter_kind == "control_and_target_diff":
-                control = last_target_filtered + target_diff
-            elif filter_kind == "feedback_pd_traj":
-                control = target_step_speed_limited
-            elif filter_kind == "none":
-                control = self.last_control + target_diff
-            else:
-                raise ValueError
 
             sw.lap("Put control to shared memory")
             self.shm.joint_control = control
 
-            sw.lap("Save control - gather data")
             # 分析用データ保存
+            sw.lap("Save control - gather data")
             datum = [
                 dict(
                     time=now,
@@ -1024,6 +1070,7 @@ class Doosan_CON:
             self.control_to_archiver_queue.put(datum)
 
             sw.lap("Check elapsed before command")
+            # 制御値をロボットに送る前までの処理で時間がかかっていないか確認する
             t_elapsed = time.time() - now
             if t_elapsed > t_intv * 2:
                 self.logger.warning(
@@ -1031,6 +1078,7 @@ class Doosan_CON:
                     f"{t_elapsed} seconds")
                 self.logger.warning(sw.summary())
 
+            # ロボットに制御値を送り制御する
             if move_robot:
                 sw.lap("Send arm command")
                 if control_interface == "position":
@@ -1058,16 +1106,21 @@ class Doosan_CON:
                     f"{t_elapsed} seconds")
                 self.logger.warning(sw.summary())
 
-            self.control = control
             sw.stop()
+
+            # ユーザーが停止を要求した場合に、ロボットがゆるやかに静止を完了していれば抜ける
+            # NOTE: 判定用にインスタンス変数かしている
+            self.control = control
             if stop:
                 if self.is_ready_to_stop():
                     break
 
             self.last_control = control
             self.last = now
- 
-        # スレーブモード解除可能な状態になったら即時に解除しないと指令値生成遅延になる
+
+        # スレーブモードを解除する
+        # NOTE: Cobotta Proではスレーブモード解除可能な状態になったら
+        # 即時に解除しないと指令値生成遅延になる
         self.leave_servo_mode()       
 
          # ツールチェンジなど後の制御可能フラグ
