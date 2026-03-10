@@ -1333,7 +1333,7 @@ class Doosan_CON:
                 self.logger.error(f"{self.format_error(e)}")
 
                 # 目標値が状態値から大きく離れた場合は自動復帰しない
-                if str(e) == "Target and state are too different":
+                if str(e).startswith("Target and state are too different."):
                     self.shm.stop_realtime_control = 0
                     return False
 
