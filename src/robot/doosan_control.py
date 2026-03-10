@@ -822,7 +822,6 @@ class Doosan_CON:
     def control_loop(self, f: TextIO | None = None) -> bool:
         """リアルタイム制御ループ"""
         # ロボット固有の処理を含まない
-        self.enter_servo_mode()
         self.last = 0
         self.logger.info("Start Control Loop")
         # 状態値が最新の値になるようにする
@@ -1027,11 +1026,12 @@ class Doosan_CON:
             sw.lap("Get control")
             # 制御値を生成する
             control = target_filtered_base + target_diff
+            # 制御値を更新する
+            self.control = control
+            self.shm.joint_control = control
+            # NOTE: "original"を保存する価値がなければ削除可能
             if filter_kind == "original":
                 self._filter.filter(control)
-
-            sw.lap("Put control to shared memory")
-            self.shm.joint_control = control
 
             # 分析用データ保存
             sw.lap("Save control - gather data")
@@ -1110,18 +1110,12 @@ class Doosan_CON:
 
             # ユーザーが停止を要求した場合に、ロボットがゆるやかに静止を完了していれば抜ける
             # NOTE: 判定用にインスタンス変数かしている
-            self.control = control
             if stop:
                 if self.is_ready_to_stop():
                     break
 
             self.last_control = control
             self.last = now
-
-        # スレーブモードを解除する
-        # NOTE: Cobotta Proではスレーブモード解除可能な状態になったら
-        # 即時に解除しないと指令値生成遅延になる
-        self.leave_servo_mode()       
 
          # ツールチェンジなど後の制御可能フラグ
         self.shm.is_controllable = 0
@@ -1318,8 +1312,14 @@ class Doosan_CON:
         while True:
             try:
                 # 制御ループ
+                # スレーブモードに入る
+                self.enter_servo_mode()
                 # 停止するのは、ユーザーが要求した場合か、自然に内部エラーが発生した場合
                 self.control_loop()
+                # スレーブモードを解除する
+                # NOTE: Cobotta Proではスレーブモード解除可能な状態になったら
+                # 即時に解除しないと指令値生成遅延になる
+                self.leave_servo_mode()       
                 # ここまで正常に終了した場合、ユーザーが要求した場合が成功を意味する
                 if self.shm.stop_realtime_control == 1:
                     self.shm.stop_realtime_control = 0
