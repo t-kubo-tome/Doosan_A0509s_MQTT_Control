@@ -1387,35 +1387,22 @@ class Doosan_CON:
                 if next_tool_id != 0:
                     self.logger.info(
                         f"User required tool change to: {next_tool_id}")
+                    ret = self.tool_change(next_tool_id)
                     # ツールチェンジに成功した場合は、ループを継続し
                     # 失敗した場合は、ループを抜ける
-                    try:
-                        self.tool_change(next_tool_id)
-                        # NOTE: より良い方法がないか
-                        # VRアニメーションがロボットの動きに追従し終わるのを待つ
-                        time.sleep(3)
-                        self.shm.tool_change_result = 1
-                        self.shm.tool_change = 0
-                        # VRのIKで解いた関節角度にロボットの関節角度を合わせるのを待つ
-                        time.sleep(3)
-                        self.logger.info("Tool change succeeded")
-                    except Exception as e:
-                        self.logger.error("Error during tool change")
-                        self.logger.error(f"{self.format_error(e)}")
-                        self.shm.tool_change_result = 2
-                        self.shm.tool_change = 0
+                    if not ret:
                         break
                 # 棚の上の箱を置くことが要求された場合
                 elif put_down_box != 0:
                     self.logger.info("User required put down box")
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
-                    self.demo_put_down_box()
+                    _ = self.demo_put_down_box()
                 elif line_cut != 0:
                     self.logger.info("User required line cut")
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
-                    self.line_cut()
+                    _ = self.line_cut()
                 # 単なる停止が要求された場合は、ループを抜ける
                 else:
                     break
@@ -1444,12 +1431,43 @@ class Doosan_CON:
         return [tool_info for tool_info in tool_infos
                 if tool_info["id"] == tool_id][0]
 
-    def tool_change(self, next_tool_id: int) -> None:
-        raise NotImplementedError
+    def tool_change(self, next_tool_id: int) -> bool:
+        try:
+            if next_tool_id == self.tool_id:
+                self.logger.info("Selected tool is current tool.")
+                self.pose[18] = 1
+                self.pose[17] = 0
+                return True
+            self._tool_change_impl(next_tool_id)
+            # NOTE: より良い方法がないか
+            # VRアニメーションがロボットの動きに追従し終わるのを待つ
+            time.sleep(3)
+            self.pose[18] = 1
+            self.pose[17] = 0
+            # VRのIKで解いた関節角度にロボットの関節角度を合わせるのを待つ
+            time.sleep(3)
+            self.logger.info("Tool change succeeded")
+            return True
+        except Exception as e:
+            self.logger.error("Error during tool change")
+            self.logger.error(f"{self.robot.format_error(e)}")
+            self.pose[18] = 2
+            self.pose[17] = 0
+            return False
+
+    def _tool_change_impl(self, next_tool_id: int) -> None:
+        # ロボット固有の処理を含む
+        self.logger.info("_tool_change_impl is not implemented")
 
     def tool_change_not_in_rt(self, tool_id: int) -> bool:
         self.logger.info("Tool change not in real-time")
-        raise NotImplementedError
+        while True:
+            next_tool_id = self.pose[17]
+            if next_tool_id != 0:
+                self.pose[41] = 0
+                ret = self.tool_change(next_tool_id)
+                self.pose[41] = 1
+                return ret
 
     def jog_joint(self, joint: int, direction: float) -> bool:
         try:
