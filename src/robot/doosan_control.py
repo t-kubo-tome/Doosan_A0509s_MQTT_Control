@@ -870,7 +870,8 @@ class Doosan_CON:
                 time.sleep(t_intv)
                 continue
 
-            # ツールチェンジなど後の制御可能フラグ
+            # ツールチェンジなどの後でリアルタイム制御が可能になったタイミングを
+            # 知らせるためのフラグ
             self.shm.is_controllable = 1
 
             # 目標値を取得しているかを確認
@@ -1117,7 +1118,8 @@ class Doosan_CON:
             self.last_control = control
             self.last = now
 
-         # ツールチェンジなど後の制御可能フラグ
+        # ツールチェンジなどの後でリアルタイム制御が可能になったタイミングを
+        # 知らせるためのフラグをリセットしておく
         self.shm.is_controllable = 0
 
         hand_thread.join()

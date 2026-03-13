@@ -225,7 +225,7 @@ class NamedSharedMemory(NamedSharedMemoryBase):
 
     @property
     def is_controllable(self) -> float:
-        """ツールチェンジなど後の制御可能フラグ。0: 制御不可。1: 制御可能。"""
+        """ツールチェンジなどの後でリアルタイム制御が可能になったタイミングを知らせるためのフラグ。0: 制御不可。1: 制御可能。"""
         return float(self._ar[41])
 
     @is_controllable.setter
