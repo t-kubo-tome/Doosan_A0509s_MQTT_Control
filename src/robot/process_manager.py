@@ -9,7 +9,7 @@ from ..common.shared_memory import TopicMemory
 from .config import ROBOT_NAME
 from .doosan_control import Doosan_CON
 from .doosan_monitor import Doosan_MON
-from .mqtt_recv import MQTT_Recv
+from .doosan_mqtt_recv import Doosan_MQTT_Recv
 from .shared_memory import NamedSharedMemory
 
 
@@ -40,7 +40,7 @@ class ProcessManager:
         self.monitor_queue = multiprocessing.Queue()
 
     def startRecvMQTT(self):
-        self.recv = MQTT_Recv()
+        self.recv = Doosan_MQTT_Recv()
         self.recvP = Process(
             target=self.recv.run_proc,
             args=(self.topic_memory,

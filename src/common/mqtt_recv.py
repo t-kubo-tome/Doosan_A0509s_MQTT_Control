@@ -4,12 +4,12 @@ import logging
 import logging.handlers
 import os
 import time
+from abc import ABC, abstractmethod
 from datetime import datetime
 
 from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
-from ..common.utils import rad2deg_list
 from .shared_memory import NamedSharedMemory
 
 # パラメータ
@@ -23,8 +23,8 @@ MQTT_MANAGE_RCV_TOPIC = os.getenv("MQTT_MANAGE_RCV_TOPIC", "dev")+"/"+ROBOT_UUID
 MQTT_COMMAND_TOPIC = os.getenv("MQTT_COMMAND_TOPIC", "dev") + "/" + ROBOT_UUID + "/command"
 
 
-class MQTT_Recv:
-    def __init__(self):
+class MQTT_Recv_Base(ABC):
+    def __init__(self, config):
         self.mqtt_ctrl_topic = None
         self.last_registered = None
         self.command_queue = None
@@ -167,36 +167,12 @@ class MQTT_Recv:
             time.sleep(1)
 
     def _on_mqtt_ctrl_topic(self, msg):
-        # ロボット固有の実装は基本的にここだけで完結するはず
         js = json.loads(msg.payload)
-        if "joints" in js:
-            self.shm.joint_target = rad2deg_list(js["joints"])
-
-        if "grip" in js:
-            right_grip = js['grip'][1]
-            if right_grip:
-                self.shm.hand_target = 1
-            else:
-                self.shm.hand_target = 2
-        
-        if "tool_change" in js:
-            if self.shm.tool_change == 0:
-                tool = js["tool_change"]
-                self.shm.stop_realtime_control = 1
-                self.shm.tool_change = tool
-
-        if "put_down_box" in js:
-            if self.shm.demo_put_down_box == 0:
-                if js["put_down_box"]:
-                    self.shm.stop_realtime_control = 1
-                    self.shm.demo_put_down_box = 1
-
-        if "line_cut" in js:
-            if self.shm.line_cut == 0:
-                if js["line_cut"]:
-                    self.shm.stop_realtime_control = 1
-                    self.shm.line_cut = 1
-
+        self._interpret_mqtt_ctrl_topic(js)
         self.shm.is_joint_target_received = 1
         js["topic"] = msg.topic
-        self.topic_memory.write("control", dict(js))
+        self.topic_memory.write("control", js)
+
+    @abstractmethod
+    def _interpret_mqtt_ctrl_topic(self, js) -> None:
+        pass
