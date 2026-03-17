@@ -5,7 +5,7 @@ import queue
 import time
 from typing import TextIO
 
-from .config import T_INTV, save_control
+from ..robot.config import T_INTV, save_control
 from .shared_memory import NamedSharedMemory
 
 

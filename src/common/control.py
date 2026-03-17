@@ -13,7 +13,7 @@ import psutil
 from ..common.filter import SMAFilter
 from ..common.interpolate import DelayedInterpolator
 from ..common.utils import StopWatch
-from .config import (
+from ..robot.config import (
     N_JOINTS,
     T_INTV,
     abs_joint_soft_limit,

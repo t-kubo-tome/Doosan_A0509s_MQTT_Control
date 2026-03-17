@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 import numpy as np
 from dotenv import load_dotenv
 
+from ..common.control import ControlBase
 from ..common.utils import deg2rad_list
 from .config import T_INTV
 from .doosan_robot import ROBOT_STATE, DoosanRobot
@@ -40,7 +41,7 @@ default_joints = {
 }
 
 
-class Doosan_CON:
+class Doosan_CON(ControlBase):
     def __init__(self):
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
