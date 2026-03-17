@@ -1,10 +1,30 @@
 from typing import Any
 
-from ..common.utils import rad2deg_list
+from ..common.mqtt_config import MQTTConfig
 from ..common.mqtt_recv import MQTT_Recv_Base
+from ..common.utils import rad2deg_list
+from .config import (
+    MQTT_CTRL_TOPIC,
+    MQTT_MANAGE_TOPIC,
+    MQTT_ROBOT_STATE_TOPIC,
+    MQTT_SERVER,
+    ROBOT_MODEL_ENV,
+    ROBOT_UUID,
+)
 
 
 class Doosan_MQTT_Recv(MQTT_Recv_Base):
+    def __init__(self):
+        config = MQTTConfig(
+            mqtt_server=MQTT_SERVER,
+            robot_uuid=ROBOT_UUID,
+            robot_model=ROBOT_MODEL_ENV,
+            mqtt_ctrl_topic=MQTT_CTRL_TOPIC,
+            mqtt_manage_topic=MQTT_MANAGE_TOPIC,
+            mqtt_robot_state_topic=MQTT_ROBOT_STATE_TOPIC,
+        )
+        super().__init__(config)
+
     def _interpret_mqtt_ctrl_topic(self, js: dict[str, Any]) -> None:
         if "joints" in js:
             self.shm.joint_target = rad2deg_list(js["joints"])
@@ -15,7 +35,7 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
                 self.shm.hand_target = 1
             else:
                 self.shm.hand_target = 2
-        
+
         if "tool_change" in js:
             if self.shm.tool_change == 0:
                 tool = js["tool_change"]

@@ -1,6 +1,7 @@
 # Doosanの状態をモニタリングする
 import json
 import logging
+import logging.handlers
 import os
 import queue
 import sys
@@ -9,24 +10,23 @@ from enum import Enum, auto
 from typing import Any, Dict, List, TextIO
 
 import psutil
-from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
 from ..common.utils import rad2deg_list
+from .config import (
+    HAND_IP,
+    MQTT_MODE,
+    MQTT_ROBOT_STATE_TOPIC,
+    MQTT_SERVER,
+    ROBOT_IP,
+    ROBOT_UUID,
+    SAVE,
+)
 from .shared_memory import NamedSharedMemory
-
-# パラメータ
-load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
-ROBOT_IP = os.getenv("ROBOT_IP", "192.168.5.45")
-HAND_IP = os.getenv("HAND_IP", "192.168.5.46")
-ROBOT_UUID = os.getenv("ROBOT_UUID","ur-real")
-MQTT_SERVER = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
-MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")+"/"+ROBOT_UUID
-MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
-SAVE = os.getenv("SAVE", "true") == "true"
 
 # 基本的に運用時には固定するパラメータ
 save_state = SAVE
+mqtt_robot_state_topic = MQTT_ROBOT_STATE_TOPIC + "/" + ROBOT_UUID
 
 
 class LoopResult(Enum):
@@ -127,8 +127,8 @@ class Doosan_MON:
             if now-last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
                 if self.client is not None:
                     jss = json.dumps(actual_joint_js)
-                    self.client.publish(MQTT_ROBOT_STATE_TOPIC, jss)
-                    actual_joint_js["topic"] = MQTT_ROBOT_STATE_TOPIC
+                    self.client.publish(mqtt_robot_state_topic, jss)
+                    actual_joint_js["topic"] = mqtt_robot_state_topic
                 self.topic_memory.write("robot", actual_joint_js)
                 last = now
 

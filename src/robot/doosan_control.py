@@ -1,27 +1,36 @@
 # Doosanを制御する
 import logging
-import os
 import traceback
 from typing import Any, Dict, List
 
 import numpy as np
-from dotenv import load_dotenv
 
 from ..common.control import ControlBase
+from ..common.control_config import ControlConfig
 from ..common.utils import deg2rad_list
-from .config import T_INTV
+from .config import (
+    HAND_IP,
+    ROBOT_IP,
+    abs_joint_soft_limit,
+    control_interface,
+    delay_for_interpolation,
+    eff_accel_limits,
+    eff_speed_limits,
+    filter_kind,
+    move_robot,
+    n_windows,
+    N_JOINTS,
+    stopped_velocity_eps,
+    T_INTV,
+    target_state_abs_joint_diff_limit,
+    use_first_speed_limit,
+    use_interp,
+    use_normalize_target_to_nearest,
+    use_second_speed_limit,
+)
 from .doosan_robot import ROBOT_STATE, DoosanRobot
 from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
 from .tools import tool_classes, tool_infos
-
-# パラメータ
-load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
-# Simulated robot
-# robot_ip = "127.0.0.1"
-# Real robot
-# robot_ip = "10.5.5.102"
-ROBOT_IP = os.getenv("ROBOT_IP", "10.5.5.102")
-HAND_IP = os.getenv("HAND_IP", "192.168.5.44")
 
 # n_windows *= int(0.008 / t_intv)
 reset_default_state = True
@@ -43,6 +52,27 @@ default_joints = {
 
 class Doosan_CON(ControlBase):
     def __init__(self):
+        config = ControlConfig(
+            n_joints=N_JOINTS,
+            t_intv=T_INTV,
+            move_robot=move_robot,
+            filter_kind=filter_kind,
+            n_windows=n_windows,
+            use_interp=use_interp,
+            delay_for_interpolation=delay_for_interpolation,
+            use_first_speed_limit=use_first_speed_limit,
+            use_second_speed_limit=use_second_speed_limit,
+            eff_speed_limits=eff_speed_limits,
+            eff_accel_limits=eff_accel_limits,
+            abs_joint_soft_limit=abs_joint_soft_limit,
+            target_state_abs_joint_diff_limit=target_state_abs_joint_diff_limit,
+            stopped_velocity_eps=stopped_velocity_eps,
+            use_normalize_target_to_nearest=use_normalize_target_to_nearest,
+            control_interface=control_interface,
+        )
+        super().__init__(config)
+        self.robot_ip = ROBOT_IP
+        self.hand_ip = HAND_IP
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
         self.robot: DoosanRobot | None = None
@@ -56,7 +86,7 @@ class Doosan_CON(ControlBase):
             use_robot_log_loop = True
             use_monitor_loop = True
             if self.robot is None:
-                self.robot = DoosanRobot(ROBOT_IP, "queue", T_INTV)
+                self.robot = DoosanRobot(self.robot_ip, "queue", self.config.t_intv)
                 if not self.robot.start():
                     raise ValueError("Failed to start robot")
                 if use_robot_log_loop:
@@ -193,7 +223,7 @@ class Doosan_CON(ControlBase):
         # self.robot.set_tool(tool_info["id_in_robot"])
         # 本処理
         max_timeout = 10  # seconds
-        self.qb_hand = qbSoftHandIndustryAPI(HAND_IP, max_timeout)
+        self.qb_hand = qbSoftHandIndustryAPI(self.hand_ip, max_timeout)
         if not self.qb_hand.isInitialized():
             raise ValueError("Failed to initialize qbSoftHandIndustryAPI")
 

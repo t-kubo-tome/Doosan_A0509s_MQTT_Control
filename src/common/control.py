@@ -13,29 +13,15 @@ import psutil
 from ..common.filter import SMAFilter
 from ..common.interpolate import DelayedInterpolator
 from ..common.utils import StopWatch
-from ..robot.config import (
-    N_JOINTS,
-    T_INTV,
-    abs_joint_soft_limit,
-    control_interface,
-    delay_for_interpolation,
-    eff_accel_limits,
-    eff_speed_limits,
-    filter_kind,
-    move_robot,
-    n_windows,
-    stopped_velocity_eps,
-    target_state_abs_joint_diff_limit,
-    use_first_speed_limit,
-    use_interp,
-    use_normalize_target_to_nearest,
-    use_second_speed_limit,
-)
+from .control_config import ControlConfig
 from .shared_memory import NamedSharedMemory
 
 
 class ControlBase(ABC):
     """ロボットの制御ループの基底クラス."""
+
+    def __init__(self, config: ControlConfig):
+        self.config = config
 
     # START: 実装必須
 
@@ -244,7 +230,7 @@ class ControlBase(ABC):
                 break
             t_elapsed = time.time() - now
             # ログの優先度は低いため周期を長くする
-            t_wait = T_INTV * 2 - t_elapsed
+            t_wait = self.config.t_intv * 2 - t_elapsed
             if t_wait > 0:
                 time.sleep(t_wait)
 
@@ -399,7 +385,7 @@ class ControlBase(ABC):
 
             # 適度に間隔を開ける
             t_elapsed = time.time() - now
-            t_wait = T_INTV - t_elapsed
+            t_wait = self.config.t_intv - t_elapsed
             if t_wait > 0:
                 time.sleep(t_wait)
 
@@ -408,7 +394,7 @@ class ControlBase(ABC):
     ) -> None:
         self.logger.info("Start Hand Control Loop")
         last_tool_corrected = None
-        t_intv_hand = T_INTV * 2
+        t_intv_hand = self.config.t_intv * 2
         last_tool_corrected_time = time.time()
         while True:
             now = time.time()
@@ -528,15 +514,15 @@ class ControlBase(ABC):
             v = target_diff / dt
             v, first_max_ratio, first_accel_max_ratio = self.speed_limit(
                 dt, v, last_target_delayed_velocity,
-                eff_speed_limits, eff_accel_limits,
+                self.config.eff_speed_limits, self.config.eff_accel_limits,
             )
             target_diff = v * dt
 
         # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
         # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
         # スレーブモードを正常に解除するためにも必要
-        if np.all(v < stopped_velocity_eps):
-            target_diff = np.zeros(N_JOINTS)
+        if np.all(v < self.config.stopped_velocity_eps):
+            target_diff = np.zeros(self.config.n_joints)
 
         return target_diff, first_max_ratio, first_accel_max_ratio
 
@@ -557,15 +543,15 @@ class ControlBase(ABC):
             v = target_diff / dt
             v, max_ratio, accel_max_ratio = self.speed_limit(
                 dt, v, last_control_velocity,
-                eff_speed_limits, eff_accel_limits,
+                self.config.eff_speed_limits, self.config.eff_accel_limits,
             )
             target_diff = v * dt
 
         # 速度がしきい値より小さければ静止させ、ドリフトや振動を避ける
         # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
         # スレーブモードを正常に解除するためにも必要
-        if np.all(v < stopped_velocity_eps):
-            target_diff = np.zeros(N_JOINTS)
+        if np.all(v < self.config.stopped_velocity_eps):
+            target_diff = np.zeros(self.config.n_joints)
 
         return target_diff, max_ratio, accel_max_ratio
 
@@ -595,12 +581,12 @@ class ControlBase(ABC):
             self._filter = SMAFilter(n_windows=n_windows)
             self._filter.reset(state)
         elif filter_kind == "feedback_pd_traj":
-            N = N_JOINTS
-            Tf = T_INTV * (N - 1)
+            N = self.config.n_joints
+            Tf = self.config.t_intv * (N - 1)
             method = 5
             Kp = 0.6
             Kd = 0.02
-            prev_error = np.zeros(N_JOINTS)
+            prev_error = np.zeros(self.config.n_joints)
             pd_step = 0
             self._filter_params = {
                 "N": N,
@@ -610,7 +596,7 @@ class ControlBase(ABC):
                 "Kd": Kd,
                 "prev_error": prev_error,
                 "pd_step": pd_step,
-                "last_control_velocity": np.zeros((N - 1, N_JOINTS)),
+                "last_control_velocity": np.zeros((N - 1, self.config.n_joints)),
             }
         elif filter_kind == "none":
             pass
@@ -709,25 +695,25 @@ class ControlBase(ABC):
                     method,
                 )
                 # 速度制限
-                dt = T_INTV
-                # [N - 1, N_JOINTS]
+                dt = self.config.t_intv
+                # [N - 1, self.config.n_joints]
                 target_diffs = np.diff(target_steps, axis=0)
                 vs = target_diffs / dt
-                ratios = np.abs(vs) / eff_speed_limits[None, :]
+                ratios = np.abs(vs) / self.config.eff_speed_limits[None, :]
                 max_ratio = np.max(ratios)
                 if max_ratio > 1:
                     vs /= max_ratio
 
                 # 加速度制限
-                # [N, N_JOINTS]
+                # [N, self.config.n_joints]
                 vs_ = np.concatenate([last_control_velocity[[-1], :], vs], axis=0)
-                # [N - 1, N_JOINTS]
+                # [N - 1, self.config.n_joints]
                 as_ = np.diff(vs_, axis=0) / dt
-                accel_ratios = np.abs(as_) / eff_accel_limits[None, :]
+                accel_ratios = np.abs(as_) / self.config.eff_accel_limits[None, :]
                 accel_max_ratio = np.max(accel_ratios)
                 if accel_max_ratio > 1:
                     as_ /= accel_max_ratio
-                # [N - 1, N_JOINTS]
+                # [N - 1, self.config.n_joints]
                 vs_ = vs_[0][None, :] + np.cumsum(as_, axis=0) * dt
 
                 target_diffs_speed_limited = vs_ * dt
@@ -735,19 +721,19 @@ class ControlBase(ABC):
                 # NOTE: どのロボットにも有意義な処理である。特にCobotta Proの
                 # スレーブモードを正常に解除するためにも必要
                 for i in range(N - 1):
-                    if np.all(target_diffs_speed_limited[i] / dt < stopped_velocity_eps):
+                    if np.all(target_diffs_speed_limited[i] / dt < self.config.stopped_velocity_eps):
                         target_diffs_speed_limited[i] = np.zeros_like(
                             target_diffs_speed_limited[i])
                         vs_[i] = target_diffs_speed_limited[i] / dt
 
-                # [N - 1, N_JOINTS]
+                # [N - 1, self.config.n_joints]
                 target_steps_speed_limited = target_steps[0][None, :] + np.cumsum(vs_, axis=0) * dt
                 last_control_velocity = vs_
                 self._filter_params["last_control_velocity"] = last_control_velocity
 
             target_filtered = target_steps_speed_limited[pd_step]
             target_filtered_base = target_filtered
-            target_diff = np.zeros(N_JOINTS)
+            target_diff = np.zeros(self.config.n_joints)
 
             # Next step
             pd_step += 1
@@ -810,7 +796,7 @@ class ControlBase(ABC):
                 ):
                     break
                 # NOTE: 目標値の生成時に状態値を常に参照しない場合短い周期で確認しズレ防止
-                time.sleep(T_INTV)
+                time.sleep(self.config.t_intv)
                 continue
 
             # ツールチェンジなどの後でリアルタイム制御が可能になったタイミングを
@@ -825,7 +811,7 @@ class ControlBase(ABC):
                 ):
                     break
                 # NOTE: 目標値の生成時に状態値を常に参照しない場合短い周期で確認しズレ防止
-                time.sleep(T_INTV)
+                time.sleep(self.config.t_intv)
                 continue
 
             # 関節の状態値
@@ -849,22 +835,22 @@ class ControlBase(ABC):
             # モデル化すればそもそも以下の処理は不要である。
             # なおとりあえず急に動こうとすれば止まる仕組みは入れている
             target_norm = target
-            if use_normalize_target_to_nearest:
+            if self.config.use_normalize_target_to_nearest:
                 target_norm = state + (target - state + 180) % 360 - 180
                 target = target_norm
 
             # TODO: VR側でもソフトリミットを設定したほうが良い
-            target_th = np.maximum(target, -abs_joint_soft_limit)
+            target_th = np.maximum(target, -self.config.abs_joint_soft_limit)
             if (target != target_th).any():
                 self.logger.warning("target reached minimum threshold")
-            target_th = np.minimum(target_th, abs_joint_soft_limit)
+            target_th = np.minimum(target_th, self.config.abs_joint_soft_limit)
             if (target != target_th).any():
                 self.logger.warning("target reached maximum threshold")
             target = target_th
 
             # 目標値が状態値から大きく離れた場合
             if (np.abs(target - state) > 
-                target_state_abs_joint_diff_limit).any():
+                self.config.target_state_abs_joint_diff_limit).any():
                 # NOTE: まだ目標値を受け取っていない場合か、
                 # すでに目標値を受け取っていて前回の目標値からも大きく離れていた場合のみ、
                 # 停止させる
@@ -874,15 +860,15 @@ class ControlBase(ABC):
                 if (
                     last_target is None or
                     (np.abs(target - last_target) > 
-                    target_state_abs_joint_diff_limit).any()
+                    self.config.target_state_abs_joint_diff_limit).any()
                 ):
                     # 強制停止する。ゆるやかな停止ではエラーの返し方が複雑になるため
                     msg = "Target and state are too different.\n"
                     msg += "| Joint  | Target | State  | Diff   | Limit  |\n"
                     msg += "| ------ | ------ | ------ | ------ | ------ |\n"
-                    for i in range(N_JOINTS):
-                        if abs(target[i] - state[i]) > target_state_abs_joint_diff_limit[i]:
-                            msg += f"| {i: <6d} | {target[i]: <6.1f} | {state[i]: <6.1f} | {abs(target[i] - state[i]): <6.1f} | {target_state_abs_joint_diff_limit[i]: <6.1f} |\n"
+                    for i in range(self.config.n_joints):
+                        if abs(target[i] - state[i]) > self.config.target_state_abs_joint_diff_limit[i]:
+                            msg += f"| {i: <6d} | {target[i]: <6.1f} | {state[i]: <6.1f} | {abs(target[i] - state[i]): <6.1f} | {self.config.target_state_abs_joint_diff_limit[i]: <6.1f} |\n"
                     with lock:
                         error_info['kind'] = "robot"
                         error_info['msg'] = msg
@@ -906,8 +892,8 @@ class ControlBase(ABC):
                     break
 
                 # 目標値を遅延を許して極力線形補間するためのセットアップ
-                if use_interp:
-                    di = DelayedInterpolator(delay=delay_for_interpolation)
+                if self.config.use_interp:
+                    di = DelayedInterpolator(delay=self.config.delay_for_interpolation)
                     di.reset(now, target)
                     target_delayed = di.read(now, target)
                 else:
@@ -915,14 +901,14 @@ class ControlBase(ABC):
 
 
                 self.last_target_delayed = target_delayed
-                self.last_target_delayed_velocity = np.zeros(N_JOINTS)
+                self.last_target_delayed_velocity = np.zeros(self.config.n_joints)
 
                 # 制御値の初期化
                 self.last_control = state
-                self.last_control_velocity = np.zeros(N_JOINTS)
+                self.last_control_velocity = np.zeros(self.config.n_joints)
 
                 # 移動平均フィルタのセットアップ
-                self.init_filter(filter_kind, n_windows, state, target)
+                self.init_filter(self.config.filter_kind, self.config.n_windows, state, target)
 
                 # 最初の目標値を受け取ったときは制御値は送らない
                 continue
@@ -942,7 +928,7 @@ class ControlBase(ABC):
             sw.lap("Read delayed interpolator")
             # target_delayedは、delay秒前の目標値を前後の値を
             # 使って線形補間したもの
-            if use_interp:
+            if self.config.use_interp:
                 target_delayed = di.read(now, target)
             else:
                 target_delayed = target
@@ -957,7 +943,7 @@ class ControlBase(ABC):
                     target_diff,
                     dt,
                     self.last_target_delayed_velocity,
-                    use_first_speed_limit,
+                    self.config.use_first_speed_limit,
                 )
             target_delayed = self.last_target_delayed + target_diff
             self.last_target_delayed = target_delayed
@@ -966,7 +952,7 @@ class ControlBase(ABC):
             sw.lap("Get filtered target")
             # 平滑化を行う
             target_diff, target_filtered_base = \
-                self.try_filter(target_delayed, state, filter_kind)
+                self.try_filter(target_delayed, state, self.config.filter_kind)
             target_filtered = target_filtered_base + target_diff
 
             sw.lap("2nd speed limit")
@@ -976,8 +962,8 @@ class ControlBase(ABC):
                     target_diff,
                     dt,
                     self.last_control_velocity,
-                    use_second_speed_limit,
-                    filter_kind,
+                    self.config.use_second_speed_limit,
+                    self.config.filter_kind,
                 )
 
             sw.lap("Get control")
@@ -987,7 +973,7 @@ class ControlBase(ABC):
             self.control = control
             self.shm.joint_control = control
             # NOTE: "original"を保存する価値がなければ削除可能
-            if filter_kind == "original":
+            if self.config.filter_kind == "original":
                 self._filter.filter(control)
 
             # 分析用データ保存
@@ -1029,19 +1015,19 @@ class ControlBase(ABC):
             sw.lap("Check elapsed before command")
             # 制御値をロボットに送る前までの処理で時間がかかっていないか確認する
             t_elapsed = time.time() - now
-            if t_elapsed > T_INTV * 2:
+            if t_elapsed > self.config.t_intv * 2:
                 self.logger.warning(
                     f"Control loop is 2 times as slow as expected before command: "
                     f"{t_elapsed} seconds")
                 self.logger.warning(sw.summary())
 
             # ロボットに制御値を送り制御する
-            if move_robot:
+            if self.config.move_robot:
                 sw.lap("Send arm command")
-                if control_interface == "position":
+                if self.config.control_interface == "position":
                     success = self.move_joint_servo(
                         control.tolist(), lock, error_info, error_event, stop_event)
-                elif control_interface == "velocity":
+                elif self.config.control_interface == "velocity":
                     v_control = (control - self.last_control) / (now - self.last)
                     success = self.move_joint_servo_by_vel(
                         v_control.tolist(), lock, error_info, error_event, stop_event)
@@ -1050,14 +1036,14 @@ class ControlBase(ABC):
 
             sw.lap("Wait control loop")
             t_elapsed = time.time() - now
-            t_wait = T_INTV - t_elapsed
+            t_wait = self.config.t_intv - t_elapsed
             if t_wait > 0:
                 if self.should_wait_control_loop():
                     time.sleep(t_wait)
 
             sw.lap("Check elapsed after command")
             t_elapsed = time.time() - now
-            if t_elapsed > T_INTV * 2:
+            if t_elapsed > self.config.t_intv * 2:
                 self.logger.warning(
                     f"Control loop is 2 times as slow as expected after command: "
                     f"{t_elapsed} seconds")
