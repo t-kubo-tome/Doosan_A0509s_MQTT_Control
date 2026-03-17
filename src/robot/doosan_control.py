@@ -31,6 +31,7 @@ from .config import (
 )
 from .doosan_robot import ROBOT_STATE, DoosanRobot
 from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
+from .shared_memory import NamedSharedMemory
 from .tools import tool_classes, tool_infos
 
 # n_windows *= int(0.008 / t_intv)
@@ -58,6 +59,9 @@ class DoosanControlConfig(ControlConfig):
 
 
 class Doosan_CON(ControlBase):
+    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
+        return NamedSharedMemory
+
     def _get_config(self) -> DoosanControlConfig:
         return DoosanControlConfig(
             n_joints=N_JOINTS,
