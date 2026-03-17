@@ -1,22 +1,16 @@
 # MQTTを受信する
-
-
 import json
 import logging
 import logging.handlers
-from paho.mqtt import client as mqtt
 import os
-from datetime import datetime
 import time
-import sys
+from datetime import datetime
 
-## ここでUUID を使いたい
-import uuid
+from dotenv import load_dotenv
+from paho.mqtt import client as mqtt
 
 from ..common.utils import rad2deg_list
 from .shared_memory import NamedSharedMemory
-
-from dotenv import load_dotenv
 
 # パラメータ
 load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))

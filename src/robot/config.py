@@ -36,3 +36,71 @@ SUPPORTED_COMMANDS_GUI_ONLY = [
     "connect_robot",
     "connect_mqtt",
 ]
+
+from typing import Literal
+# 平滑化の方法
+# NOTE: 実際のVRコントローラとの結合時に、
+# 遅延などを考慮すると改良が必要かもしれない。
+# そのときのヒントとして残している
+filter_kind: Literal[
+    "original",
+    "target",
+    "state_and_target_diff",
+    "moveit_servo_humble",
+    "control_and_target_diff",
+    "feedback_pd_traj",
+    "none",
+    "filter_target_from_target_but_diff_from_control"
+] = "filter_target_from_target_but_diff_from_control"  # "original"
+n_windows = 10
+
+# 外部速度。単位は%
+speed_normal = 20
+speed_tool_change = 2
+
+stopped_velocity_eps = 1e-4
+
+# 目標値が状態値よりこの制限より大きく乖離した場合はロボットを停止させる
+# 設定値は典型的なVRコントローラの動きから決定した
+target_state_abs_joint_diff_limit = [30, 30, 40, 40, 40, 60]
+
+use_normalize_target_to_nearest = True
+
+use_interp = True
+delay_for_interpolation = 0.1
+
+use_first_speed_limit = True
+use_second_speed_limit = True
+speed_limits = [180, 180, 180, 360, 360, 360]
+speed_limit_ratio = 0.5
+accel_limits = [s ** 2 for s in speed_limits]
+accel_limit_ratio = 0.5
+
+control_interface: Literal["position", "velocity"] = "velocity"
+
+# 基本的に運用時には固定するパラメータ
+# 実際にロボットを制御するかしないか (VRとの結合時のデバッグ用)
+import os
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__),'.env'))
+SAVE = os.getenv("SAVE", "true") == "true"
+MOVE = os.getenv("MOVE", "true") == "true"
+move_robot = MOVE
+save_control = SAVE
+
+# ロボット固有のパラメータ
+
+servo_mode = 0x202
+
+# パラメータの後処理
+
+import numpy as np
+
+speed_limits = np.array(speed_limits)
+eff_speed_limits = speed_limits * speed_limit_ratio
+accel_limits = np.array(accel_limits)
+eff_accel_limits = accel_limits * accel_limit_ratio
+abs_joint_limit = ABS_JOINT_LIMIT
+abs_joint_limit = np.array(abs_joint_limit)
+abs_joint_soft_limit = abs_joint_limit - 10

@@ -3,11 +3,12 @@
 import multiprocessing
 from multiprocessing import Process
 
-from .config import ROBOT_NAME
-from .doosan_control import Doosan_CON, Doosan_CON_Archiver
-from .doosan_monitor import Doosan_MON
+from ..common.control_save import CON_Archiver
 from ..common.monitor_gui import run_joint_monitor_gui
 from ..common.shared_memory import TopicMemory
+from .config import ROBOT_NAME
+from .doosan_control import Doosan_CON
+from .doosan_monitor import Doosan_MON
 from .mqtt_recv import MQTT_Recv
 from .shared_memory import NamedSharedMemory
 
@@ -77,7 +78,7 @@ class ProcessManager:
             name=f"{ROBOT_NAME}-control")
         self.ctrlP.start()
 
-        self.ctrl_archiver = Doosan_CON_Archiver()
+        self.ctrl_archiver = CON_Archiver()
         self.ctrl_archiverP = Process(
             target=self.ctrl_archiver.run_proc,
             args=(self.control_archiver_pipe,
