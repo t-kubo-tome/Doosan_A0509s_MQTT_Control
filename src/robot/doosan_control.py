@@ -1,16 +1,19 @@
 # Doosanを制御する
 import logging
+import os
 import traceback
+from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import numpy as np
 
-from ..common.control import ControlBase
-from ..common.control_config import ControlConfig
+from ..common.control import ControlBase, ControlConfig
 from ..common.utils import deg2rad_list
 from .config import (
     HAND_IP,
+    N_JOINTS,
     ROBOT_IP,
+    T_INTV,
     abs_joint_soft_limit,
     control_interface,
     delay_for_interpolation,
@@ -19,9 +22,7 @@ from .config import (
     filter_kind,
     move_robot,
     n_windows,
-    N_JOINTS,
     stopped_velocity_eps,
-    T_INTV,
     target_state_abs_joint_diff_limit,
     use_first_speed_limit,
     use_interp,
@@ -50,9 +51,15 @@ default_joints = {
 }
 
 
+@dataclass
+class DoosanControlConfig(ControlConfig):
+    robot_ip: str
+    hand_ip: str
+
+
 class Doosan_CON(ControlBase):
-    def __init__(self):
-        config = ControlConfig(
+    def _get_config(self) -> DoosanControlConfig:
+        return DoosanControlConfig(
             n_joints=N_JOINTS,
             t_intv=T_INTV,
             move_robot=move_robot,
@@ -69,10 +76,11 @@ class Doosan_CON(ControlBase):
             stopped_velocity_eps=stopped_velocity_eps,
             use_normalize_target_to_nearest=use_normalize_target_to_nearest,
             control_interface=control_interface,
+            robot_ip=ROBOT_IP,
+            hand_ip=HAND_IP,
         )
-        super().__init__(config)
-        self.robot_ip = ROBOT_IP
-        self.hand_ip = HAND_IP
+
+    def _init_other_than_config(self) -> None:
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
         self.robot: DoosanRobot | None = None
@@ -86,7 +94,7 @@ class Doosan_CON(ControlBase):
             use_robot_log_loop = True
             use_monitor_loop = True
             if self.robot is None:
-                self.robot = DoosanRobot(self.robot_ip, "queue", self.config.t_intv)
+                self.robot = DoosanRobot(self.config.robot_ip, "queue", self.config.t_intv)
                 if not self.robot.start():
                     raise ValueError("Failed to start robot")
                 if use_robot_log_loop:
@@ -223,7 +231,7 @@ class Doosan_CON(ControlBase):
         # self.robot.set_tool(tool_info["id_in_robot"])
         # 本処理
         max_timeout = 10  # seconds
-        self.qb_hand = qbSoftHandIndustryAPI(self.hand_ip, max_timeout)
+        self.qb_hand = qbSoftHandIndustryAPI(self.config.hand_ip, max_timeout)
         if not self.qb_hand.isInitialized():
             raise ValueError("Failed to initialize qbSoftHandIndustryAPI")
 

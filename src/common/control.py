@@ -4,7 +4,8 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, TextIO
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal, TextIO
 
 import modern_robotics as mr
 import numpy as np
@@ -13,17 +14,47 @@ import psutil
 from ..common.filter import SMAFilter
 from ..common.interpolate import DelayedInterpolator
 from ..common.utils import StopWatch
-from .control_config import ControlConfig
 from .shared_memory import NamedSharedMemory
+
+
+@dataclass
+class ControlConfig:
+    n_joints: int
+    t_intv: float
+    move_robot: bool
+    filter_kind: Literal[
+        "original",
+        "target",
+        "state_and_target_diff",
+        "moveit_servo_humble",
+        "control_and_target_diff",
+        "feedback_pd_traj",
+        "none",
+        "filter_target_from_target_but_diff_from_control",
+    ]
+    n_windows: int
+    use_interp: bool
+    delay_for_interpolation: float
+    use_first_speed_limit: bool
+    use_second_speed_limit: bool
+    eff_speed_limits: np.ndarray
+    eff_accel_limits: np.ndarray
+    abs_joint_soft_limit: np.ndarray
+    target_state_abs_joint_diff_limit: list
+    stopped_velocity_eps: float
+    use_normalize_target_to_nearest: bool
+    control_interface: Literal["position", "velocity"]
 
 
 class ControlBase(ABC):
     """ロボットの制御ループの基底クラス."""
+    @abstractmethod
+    def _get_config(self) -> ControlConfig:
+        pass
 
-    def __init__(self, config: ControlConfig):
-        self.config = config
-
-    # START: 実装必須
+    @abstractmethod
+    def _init_other_than_config(self) -> None:
+        pass
 
     @abstractmethod
     def init_robot(self) -> None:
@@ -197,6 +228,10 @@ class ControlBase(ABC):
     # STOP: オーバーライドの可能性あり
 
     # START: オーバーライドの可能性なし
+
+    def __init__(self) -> None:
+        self.config = self._get_config()
+        self._init_other_than_config()
 
     def init_realtime(self):
         os_used = sys.platform

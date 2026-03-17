@@ -1,7 +1,7 @@
+from dataclasses import dataclass
 from typing import Any
 
-from ..common.mqtt_config import MQTTConfig
-from ..common.mqtt_recv import MQTT_Recv_Base
+from ..common.mqtt_recv import MQTT_Recv_Base, MQTTConfig
 from ..common.utils import rad2deg_list
 from .config import (
     MQTT_CTRL_TOPIC,
@@ -13,9 +13,14 @@ from .config import (
 )
 
 
+@dataclass
+class DoosanMQTTConfig(MQTTConfig):
+    pass
+
+
 class Doosan_MQTT_Recv(MQTT_Recv_Base):
-    def __init__(self):
-        config = MQTTConfig(
+    def _get_config(self) -> DoosanMQTTConfig:
+        return DoosanMQTTConfig(
             mqtt_server=MQTT_SERVER,
             robot_uuid=ROBOT_UUID,
             robot_model=ROBOT_MODEL_ENV,
@@ -23,7 +28,9 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
             mqtt_manage_topic=MQTT_MANAGE_TOPIC,
             mqtt_robot_state_topic=MQTT_ROBOT_STATE_TOPIC,
         )
-        super().__init__(config)
+
+    def _init_other_than_config(self) -> None:
+        pass
 
     def _interpret_mqtt_ctrl_topic(self, js: dict[str, Any]) -> None:
         if "joints" in js:

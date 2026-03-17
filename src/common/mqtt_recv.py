@@ -4,17 +4,40 @@ import logging
 import logging.handlers
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 
 from paho.mqtt import client as mqtt
 
-from .mqtt_config import MQTTConfig
 from .shared_memory import NamedSharedMemory
 
 
+@dataclass
+class MQTTConfig:
+    mqtt_server: str
+    robot_uuid: str
+    robot_model: str
+    mqtt_ctrl_topic: str
+    mqtt_manage_topic: str
+    mqtt_robot_state_topic: str
+
+
 class MQTT_Recv_Base(ABC):
-    def __init__(self, config: MQTTConfig):
-        self.config = config
+    @abstractmethod
+    def _get_config(self) -> MQTTConfig:
+        pass
+
+    @abstractmethod
+    def _init_other_than_config(self) -> None:
+        pass
+
+    @abstractmethod
+    def _interpret_mqtt_ctrl_topic(self, js) -> None:
+        pass
+
+    def __init__(self):
+        self.config = self._get_config()
+        self._init_other_than_config()
         self.mqtt_ctrl_topic = None
         self.last_registered = None
         self.command_queue = None
@@ -166,7 +189,3 @@ class MQTT_Recv_Base(ABC):
         self.shm.is_joint_target_received = 1
         js["topic"] = msg.topic
         self.topic_memory.write("control", js)
-
-    @abstractmethod
-    def _interpret_mqtt_ctrl_topic(self, js) -> None:
-        pass
