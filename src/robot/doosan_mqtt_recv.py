@@ -3,6 +3,7 @@ from typing import Any
 
 from ..common.mqtt_recv import MQTT_Recv_Base, MQTTConfig
 from ..common.utils import rad2deg_list
+from .shared_memory import NamedSharedMemory
 from .config import (
     MQTT_CTRL_TOPIC,
     MQTT_MANAGE_TOPIC,
@@ -28,6 +29,9 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
             mqtt_manage_topic=MQTT_MANAGE_TOPIC,
             mqtt_robot_state_topic=MQTT_ROBOT_STATE_TOPIC,
         )
+
+    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
+        return NamedSharedMemory
 
     def _init_other_than_config(self) -> None:
         pass

@@ -14,7 +14,7 @@ from typing import Any, Dict, List, TextIO
 import psutil
 from paho.mqtt import client as mqtt
 
-from .shared_memory import NamedSharedMemory
+from .shared_memory import NamedSharedMemoryBase
 from .utils import rad2deg_list
 
 
@@ -38,6 +38,10 @@ class MonitorBase(ABC):
 
     @abstractmethod
     def _get_config(self) -> MonitorConfig:
+        pass
+
+    @abstractmethod
+    def _get_make_shared_memory(self) -> type[NamedSharedMemoryBase]:
         pass
 
     @abstractmethod
@@ -202,7 +206,7 @@ class MonitorBase(ABC):
     ) -> None:
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.shm = NamedSharedMemory(create=False)
+        self.shm = self._get_make_shared_memory()(create=False)
         self.topic_memory = topic_memory
         self.slave_mode_lock = slave_mode_lock
         self.monitor_pipe = monitor_pipe

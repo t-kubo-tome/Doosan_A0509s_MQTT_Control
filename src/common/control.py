@@ -1367,8 +1367,7 @@ class ControlBase(ABC):
     def run_proc(self, control_pipe, slave_mode_lock, log_queue, control_to_archiver_queue, monitor_queue):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        make_shared_memory = self._get_make_shared_memory()
-        self.shm = make_shared_memory(create=False)
+        self.shm = self._get_make_shared_memory()(create=False)
         self.slave_mode_lock = slave_mode_lock
         self.control_pipe = control_pipe
         self.control_to_archiver_queue = control_to_archiver_queue

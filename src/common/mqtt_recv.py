@@ -9,7 +9,7 @@ from datetime import datetime
 
 from paho.mqtt import client as mqtt
 
-from .shared_memory import NamedSharedMemory
+from .shared_memory import NamedSharedMemoryBase
 
 
 @dataclass
@@ -29,6 +29,10 @@ class MQTT_Recv_Base(ABC):
 
     @abstractmethod
     def _init_other_than_config(self) -> None:
+        pass
+
+    @abstractmethod
+    def _get_make_shared_memory(self) -> type[NamedSharedMemoryBase]:
         pass
 
     @abstractmethod
@@ -155,7 +159,7 @@ class MQTT_Recv_Base(ABC):
     def run_proc(self, topic_memory, log_queue, command_queue=None):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.shm = NamedSharedMemory(create=False)
+        self.shm = self._get_make_shared_memory()(create=False)
         self.topic_memory = topic_memory
         self.command_queue = command_queue
         self.connect_mqtt()
