@@ -515,16 +515,19 @@ class ControlBase(ABC):
         return v, max_ratio, accel_max_ratio
 
     def try_first_speed_limit(
-        self, target_diff: np.ndarray, dt: float, use_first_speed_limit: bool,
+        self,
+        target_diff: np.ndarray,
+        dt: float,
+        last_target_delayed_velocity: np.ndarray,
+        use_first_speed_limit: bool,
     ) -> tuple[np.ndarray, float, float]:
         first_max_ratio = -1
         first_accel_max_ratio = -1
 
-        v = target_diff / dt
-
         if use_first_speed_limit:
+            v = target_diff / dt
             v, first_max_ratio, first_accel_max_ratio = self.speed_limit(
-                dt, v, self.last_target_delayed_velocity,
+                dt, v, last_target_delayed_velocity,
                 eff_speed_limits, eff_accel_limits,
             )
             target_diff = v * dt
@@ -534,9 +537,6 @@ class ControlBase(ABC):
         # スレーブモードを正常に解除するためにも必要
         if np.all(v < stopped_velocity_eps):
             target_diff = np.zeros(N_JOINTS)
-            v = np.zeros(N_JOINTS)
-
-        self.last_target_delayed_velocity = v
 
         return target_diff, first_max_ratio, first_accel_max_ratio
 
@@ -544,6 +544,7 @@ class ControlBase(ABC):
         self,
         target_diff: np.ndarray,
         dt: float,
+        last_control_velocity: np.ndarray,
         use_second_speed_limit: bool,
         filter_kind: str,
     ) -> tuple[np.ndarray, float, float]:
@@ -551,12 +552,11 @@ class ControlBase(ABC):
             return target_diff, -1, -1
         max_ratio = -1
         accel_max_ratio = -1
-        
-        v = target_diff / dt
 
         if use_second_speed_limit:
+            v = target_diff / dt
             v, max_ratio, accel_max_ratio = self.speed_limit(
-                dt, v, self.last_control_velocity,
+                dt, v, last_control_velocity,
                 eff_speed_limits, eff_accel_limits,
             )
             target_diff = v * dt
@@ -566,9 +566,7 @@ class ControlBase(ABC):
         # スレーブモードを正常に解除するためにも必要
         if np.all(v < stopped_velocity_eps):
             target_diff = np.zeros(N_JOINTS)
-            v = np.zeros(N_JOINTS)
 
-        self.last_control_velocity = v
         return target_diff, max_ratio, accel_max_ratio
 
     def init_filter(
@@ -619,7 +617,7 @@ class ControlBase(ABC):
 
     def try_filter(
         self, target_delayed: np.ndarray, state: np.ndarray, filter_kind: str,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         # 平滑化
         if filter_kind == "filter_target_from_target_but_diff_from_control":
             # 成功している方法
@@ -762,7 +760,7 @@ class ControlBase(ABC):
             target_diff = target_filtered - target_filtered_base
         else:
             raise ValueError
-        return target_diff, target_filtered, target_filtered_base
+        return target_diff, target_filtered_base
 
     def control_loop(self, f: TextIO | None = None) -> bool:
         """リアルタイム制御ループ"""
@@ -914,6 +912,8 @@ class ControlBase(ABC):
                     target_delayed = di.read(now, target)
                 else:
                     target_delayed = target
+
+
                 self.last_target_delayed = target_delayed
                 self.last_target_delayed_velocity = np.zeros(N_JOINTS)
 
@@ -954,20 +954,31 @@ class ControlBase(ABC):
             target_diff = target_delayed - self.last_target_delayed
             target_diff, first_max_ratio, first_accel_max_ratio = \
                 self.try_first_speed_limit(
-                    target_diff, dt, use_first_speed_limit)
+                    target_diff,
+                    dt,
+                    self.last_target_delayed_velocity,
+                    use_first_speed_limit,
+                )
             target_delayed = self.last_target_delayed + target_diff
             self.last_target_delayed = target_delayed
+            self.last_target_delayed_velocity = target_diff / dt
 
             sw.lap("Get filtered target")
             # 平滑化を行う
-            target_diff, target_filtered, target_filtered_base = \
+            target_diff, target_filtered_base = \
                 self.try_filter(target_delayed, state, filter_kind)
+            target_filtered = target_filtered_base + target_diff
 
             sw.lap("2nd speed limit")
             # 制御値が速度制限されたものであることを保証する
             target_diff, max_ratio, accel_max_ratio = \
                 self.try_second_speed_limit(
-                    target_diff, dt, use_second_speed_limit, filter_kind)
+                    target_diff,
+                    dt,
+                    self.last_control_velocity,
+                    use_second_speed_limit,
+                    filter_kind,
+                )
 
             sw.lap("Get control")
             # 制御値を生成する
@@ -1061,6 +1072,7 @@ class ControlBase(ABC):
                     break
 
             self.last_control = control
+            self.last_control_velocity = target_diff / dt
             self.last = now
 
         # ツールチェンジなどの後でリアルタイム制御が可能になったタイミングを
