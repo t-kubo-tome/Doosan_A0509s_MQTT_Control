@@ -6,7 +6,7 @@ import time
 from typing import TextIO
 
 from ..robot.config import T_INTV, save_control
-from .shared_memory import NamedSharedMemory
+from ..robot.shared_memory import NamedSharedMemory
 
 
 class CON_Archiver:
