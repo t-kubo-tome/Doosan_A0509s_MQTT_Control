@@ -102,6 +102,8 @@ control_interface: Literal["position", "velocity"] = "velocity"
 move_robot = MOVE
 save_control = SAVE
 
+tidy_joint = [0.0, 0.0, -90.0, 0.0, -90.0, 0.0]
+
 # ロボット固有のパラメータ
 servo_mode = 0x202
 

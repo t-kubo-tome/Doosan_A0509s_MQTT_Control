@@ -23,6 +23,7 @@ from .config import (
     move_robot,
     n_windows,
     stopped_velocity_eps,
+    tidy_joint,
     target_state_abs_joint_diff_limit,
     use_first_speed_limit,
     use_interp,
@@ -36,20 +37,6 @@ from .tools import tool_classes, tool_infos
 
 # n_windows *= int(0.008 / t_intv)
 reset_default_state = True
-default_joints = {
-    # TCPが台の中心の上に来る初期位置
-    "tidy": [0.0, 0.0, -90.0, 0.0, -90.0, 0.0],
-    # NOTE: j5の基準がVRと実機とでずれているので補正。将来的にはVR側で修正?
-    "vr": [159.3784, 10.08485, 122.90902, 151.10866, -43.20116 + 90, 20.69275],
-    # NOTE: 2025/04/18 19:25の新しい位置?VRとの対応がおかしい気がする
-    # 毎回の値も[0, 0, 0, 0, 0, 0]が飛んでくる気がする
-    "vr2": [115.55677, 5.86272, 135.70465, 110.53529, -15.55474 + 90, 35.59977],
-    # NOTE: 2025/05/30での新しい位置
-    "vr3": [113.748, 5.645, 136.098, 109.059, 75.561, 35.82],
-    # NOTE: 2025/06/05 での新しい位置
-    "vr4": [-46.243, 10.258, 128.201, 125.629, 62.701, 32.618],
-    "vr5": [-66.252, 5.645, 136.098, 109.059, 75.561, 35.82],
-}
 
 
 @dataclass
@@ -80,13 +67,12 @@ class Doosan_CON(ControlBase):
             stopped_velocity_eps=stopped_velocity_eps,
             use_normalize_target_to_nearest=use_normalize_target_to_nearest,
             control_interface=control_interface,
+            tidy_joint=tidy_joint,
             robot_ip=ROBOT_IP,
             hand_ip=HAND_IP,
         )
 
     def _init_other_than_config(self) -> None:
-        self.default_joint = default_joints["vr5"]
-        self.tidy_joint = default_joints["tidy"]
         self.robot = DoosanRobot(
             self.config.robot_ip, "queue", self.config.t_intv)
         self.qb_hand: qbSoftHandIndustryAPI | None = None
@@ -333,7 +319,7 @@ class Doosan_CON(ControlBase):
     def tidy_pose(self) -> bool:
         self.logger.info("Tidy pose")
         try:
-            ret = self.robot.move_joint(*self.tidy_joint)
+            ret = self.robot.move_joint(*self.config.tidy_joint)
             if not ret:
                 raise ValueError("Failed to move to tidy pose")
             return True

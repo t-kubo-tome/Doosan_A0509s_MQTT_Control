@@ -44,6 +44,7 @@ class ControlConfig:
     stopped_velocity_eps: float
     use_normalize_target_to_nearest: bool
     control_interface: Literal["position", "velocity"]
+    tidy_joint: List[float]
 
 
 class ControlBase(ABC):
