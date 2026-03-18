@@ -50,13 +50,10 @@ namespace {
   }
 }
 
-
 // TP初期化の際に一度だけ呼ばれる
 void OnTpInitializingCompleted() {
+  push_log("[OnTpInitializingCompleted] g_TpInitailizingComplted = TRUE");
   g_TpInitailizingComplted = TRUE;
-  // TPが初期化されたら制御権を要求する
-  Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_FORCE_REQUEST);
-  push_log("[OnTpInitializingCompleted] MANAGE_ACCESS_CONTROL_FORCE_REQUEST");
 }
 
 // エラーなどでプログラムが終了したときに完全に終了したかをチェックする
@@ -169,15 +166,17 @@ void OnMonitroingAccessControlCB(const MONITORING_ACCESS_CONTROL eTrasnsitContro
     // 制御権の移行をリクエストされたら (おそらくTPなどから)
     case MONITORING_ACCESS_CONTROL_REQUEST:
       push_log("[OnMonitroingAccessControlCB] MONITORING_ACCESS_CONTROL_REQUEST");
-      assert(Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_RESPONSE_NO));
+      // サンプルコードでは拒否していたが、ここではTPを尊重して許可することにしている
+      // assert(Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_RESPONSE_NO));
       break;
-    // 制御権を失ったら (おそらくTPなどが制御権を失うケースを含む)
+    // 制御権を失ったら (おそらく本プログラムが)
     case MONITORING_ACCESS_CONTROL_LOSS:
       push_log("[OnMonitroingAccessControlCB] MONITORING_ACCESS_CONTROL_LOSS");
       g_bHasControlAuthority = FALSE;
-      if (g_TpInitailizingComplted) {
-        Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_FORCE_REQUEST);
-      }
+      // サンプルコードでは自動復帰していたが、ここではTPを尊重して何もしないことにしている
+      // if (g_TpInitailizingComplted) {
+      //   Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_FORCE_REQUEST);
+      // }
       break;
     // 制御権を取得したことを確認したら
     case MONITORING_ACCESS_CONTROL_GRANT:
@@ -274,9 +273,39 @@ Robot::~Robot() {
 
 bool Robot::start() {
   push_log("[start] start");
+  if (is_started_) {
+    push_log("[start] already started");
+    return true;
+  }
+  // ロボットコントローラーに接続
+  // すでに接続しているとfalseになるのでこの上でis_started_を使う
   if (!Drfl.open_connection(ip_)) {
     push_log("[start] open_connection failed");
     return false;
+  }
+  // TPの初期化が完了するのを待つ
+  int timeout_tp = 5000;  // milliseconds
+  while (!g_TpInitailizingComplted) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    timeout_tp -= 100;
+    if (timeout_tp <= 0) {
+      push_log("[start] timeout of 5s while waiting for TP initializing completed");
+      return false;
+    }
+  }
+  // 制御権を取得する
+  if (!Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_FORCE_REQUEST)) {
+    push_log("[start] ManageAccessControl failed");
+    return false;
+  }
+  int timeout_authority = 5000;  // milliseconds
+  while (!g_bHasControlAuthority) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    timeout_authority -= 100;
+    if (timeout_authority <= 0) {
+      push_log("[start] timeout of 5s while waiting for control authority");
+      return false;
+    }
   }
   // バージョンを指定する必要あり
   if (!Drfl.setup_monitoring_version(1)) {
@@ -292,8 +321,10 @@ bool Robot::start() {
   // 特に受信のためにstart内で接続する必要がある
   // enableしなくても有効に受信できることを確認済み
   // 1対1接続しかできない
-  push_log("[start] connect_rt_control");
-  if (!Drfl.connect_rt_control(ip_)) return false;
+  if (!Drfl.connect_rt_control(ip_)){
+    push_log("[start] connect_rt_control failed");
+    return false;
+  }
   // PCからロボットコントローラへの送信設定
   // 送信データはトルクやDigital/Analog Input/Outputであり
   // servo制御ではないので基本使わない
@@ -303,12 +334,15 @@ bool Robot::start() {
   // if (!Drfl.set_rt_control_input("v1.0", fPeriod_, -1)) return;
   // ロボットコントローラーからPCへの送信設定
   // set_rt_control_outputは現在はnLossCntによるdisconnect判定はないとのこと
-  push_log("[start] set_rt_control_output");
-  // TODO: disconnect判定後の対応
-  if (!Drfl.set_rt_control_output("v1.0", fPeriod_, 4)) return false;
+  if (!Drfl.set_rt_control_output("v1.0", fPeriod_, 4)) {
+    push_log("[start] set_rt_control_output failed");
+    return false;
+  }
   // データ送受信開始
-  push_log("[start] start_rt_control");
-  if (!Drfl.start_rt_control()) return false;
+  if (!Drfl.start_rt_control()) {
+    push_log("[start] start_rt_control failed");
+    return false;
+  }
   // 直後はデータ受信できないので少し待つ
   std::this_thread::sleep_for(std::chrono::seconds(1));
   is_started_ = true;
@@ -316,21 +350,19 @@ bool Robot::start() {
 }
 bool Robot::enable() {
   push_log("[enable] start");
+  // すでに有効化している場合もすべての処理がtrueになるので全体としてもtrueを返す
+  // モーター電源有効化
   if (!Drfl.set_robot_control(CONTROL_SERVO_ON)) {
     push_log("[enable] set_robot_control failed");
     return false;
   }
-  // 初期化完了して制御を受け付ける状態になっていないか、
-  // 制御権がない場合はOnMonitroingAccessControlCBが
-  // 背後で実行されるのを待機する
-  int retry = 0;
-  int max_retry = 30;
-  while ((Drfl.get_robot_state() != STATE_STANDBY) || !g_bHasControlAuthority) {
-    this_thread::sleep_for(std::chrono::milliseconds(1000));
-    push_log("[enable] Taking control...");
-    retry += 1;
-    if (retry == max_retry) {
-      push_log("[enable] Taking control retry failed");
+  // 制御を受け付ける状態になるまで待つ
+  int timeout_state = 5000;  // milliseconds
+  while (Drfl.get_robot_state() != STATE_STANDBY) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    timeout_state -= 100;
+    if (timeout_state <= 0) {
+      push_log("[enable] timeout of 5s while waiting for control state");
       return false;
     }
   }

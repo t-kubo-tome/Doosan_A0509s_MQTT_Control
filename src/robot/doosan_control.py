@@ -87,24 +87,18 @@ class Doosan_CON(ControlBase):
     def _init_other_than_config(self) -> None:
         self.default_joint = default_joints["vr5"]
         self.tidy_joint = default_joints["tidy"]
-        self.robot: DoosanRobot | None = None
+        self.robot = DoosanRobot(
+            self.config.robot_ip, "queue", self.config.t_intv)
         self.qb_hand: qbSoftHandIndustryAPI | None = None
         self.all_robot_state = {}
 
-    def init_robot(self) -> None:
-        # TODO: 要改善
+    def connect_robot(self) -> None:
         # ロボット固有の処理を含む
         try:
-            use_robot_log_loop = True
-            use_monitor_loop = True
-            if self.robot is None:
-                self.robot = DoosanRobot(self.config.robot_ip, "queue", self.config.t_intv)
-                if not self.robot.start():
-                    raise ValueError("Failed to start robot")
-                if use_robot_log_loop:
-                    self.init_robot_log_loop()                
-                if use_monitor_loop:
-                    self.init_monitor_loop()
+            if not self.robot.start():
+                raise ValueError("Failed to start robot")
+            self.init_robot_log_loop()             
+            self.init_monitor_loop()
             tool_id = int(os.environ["TOOL_ID"])
             self.find_and_setup_hand(tool_id)
         except Exception as e:

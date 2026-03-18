@@ -61,7 +61,7 @@ class ControlBase(ABC):
         pass
 
     @abstractmethod
-    def init_robot(self) -> None:
+    def connect_robot(self) -> None:
         pass
 
     @abstractmethod
@@ -1373,7 +1373,7 @@ class ControlBase(ABC):
         self.control_to_archiver_queue = control_to_archiver_queue
         self.monitor_queue = monitor_queue
 
-        self.init_robot()
+        self.connect_robot()
         self.init_realtime()
         # リアルタイム性を考慮し、MQTTリアルタイム制御はメインスレッドで行う
         # コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う

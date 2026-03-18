@@ -38,7 +38,7 @@ class Doosan_MON(MonitorBase):
     def format_error(self, e: Exception) -> str:
         return str(e)
 
-    def init_robot(self) -> None:
+    def connect_robot(self) -> None:
         pass
 
     def find_and_setup_hand(self, tool_id: int) -> None:

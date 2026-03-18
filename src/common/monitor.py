@@ -53,7 +53,7 @@ class MonitorBase(ABC):
         pass
 
     @abstractmethod
-    def init_robot(self) -> None:
+    def connect_robot(self) -> None:
         pass
 
     @abstractmethod
@@ -214,7 +214,7 @@ class MonitorBase(ABC):
         self.logging_dir = logging_dir
 
         self.init_realtime()
-        self.init_robot()
+        self.connect_robot()
         self.connect_mqtt(disable_mqtt=disable_mqtt)
         while True:
             try:
