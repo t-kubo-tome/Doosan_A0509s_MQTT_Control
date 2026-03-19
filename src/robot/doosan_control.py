@@ -1,5 +1,4 @@
 # Doosanを制御する
-import logging
 import os
 import traceback
 from dataclasses import dataclass
@@ -30,7 +29,7 @@ from .config import (
     use_normalize_target_to_nearest,
     use_second_speed_limit,
 )
-from .doosan_robot import ROBOT_STATE, DoosanRobot
+from .doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
 from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
 from .shared_memory import NamedSharedMemory
 from .tools import tool_classes, tool_infos
@@ -73,8 +72,13 @@ class Doosan_CON(ControlBase):
         )
 
     def _init_other_than_config(self) -> None:
-        self.robot = DoosanRobot(
-            self.config.robot_ip, "queue", self.config.t_intv)
+        self.robot = DoosanRobotExt(
+            self.config.robot_ip,
+            "queue",
+            self.config.t_intv,
+            logger=self.robot_logger,
+            log_t_intv=self.config.t_intv * 2,
+        )
         self.qb_hand: qbSoftHandIndustryAPI | None = None
         self.all_robot_state = {}
 
@@ -83,36 +87,12 @@ class Doosan_CON(ControlBase):
         try:
             if not self.robot.start():
                 raise ValueError("Failed to start robot")
-            self.init_robot_log_loop()             
             self.init_monitor_loop()
             tool_id = int(os.environ["TOOL_ID"])
             self.find_and_setup_hand(tool_id)
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
             self.logger.error(f"{self.format_error(e)}")
-
-    def robot_log_loop_step(self) -> None:
-        # ロボット固有の処理を含む
-        log_block = self.robot.pop_log_queue()
-        for log in log_block:
-            # log is a tuple: (timestamp, level, message)
-            timestamp, level, message = log                
-            # ログレコードを手動で作成してタイムスタンプを反映
-            log_record = logging.LogRecord(
-                name=self.robot_logger.name,
-                level=getattr(logging, level, logging.INFO),
-                pathname="",
-                lineno=0,
-                msg=message,
-                args=(),
-                exc_info=None
-            )
-            # タイムスタンプを設定（Unix timestamp）
-            log_record.created = timestamp
-            log_record.msecs = (timestamp - int(timestamp)) * 1000
-            # ログレコードをハンドラーに直接渡す
-            if self.robot_logger.isEnabledFor(log_record.levelno):
-                self.robot_logger.handle(log_record)
 
     def real_to_vr_joint(self, joints: List[float]) -> List[float]:
         # ロボット固有の処理を含む
@@ -478,3 +458,4 @@ class Doosan_CON(ControlBase):
     def del_robot(self) -> None:
         self.robot.disable()
         self.robot.stop()
+        self.robot.stop_log_if_exists()

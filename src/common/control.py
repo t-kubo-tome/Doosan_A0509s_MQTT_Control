@@ -66,10 +66,6 @@ class ControlBase(ABC):
         pass
 
     @abstractmethod
-    def robot_log_loop_step(self) -> None:
-        pass
-
-    @abstractmethod
     def real_to_vr_joint(self, joints: List[float]) -> List[float]:
         pass
 
@@ -252,27 +248,6 @@ class ControlBase(ABC):
                 self.logger.warning("Failed to set real-time process scheduler to %u, priority %u" % (os.SCHED_FIFO, rt_app_priority))
             else:
                 self.logger.info("Process real-time priority set to: %u" % rt_app_priority)
-
-    def init_robot_log_loop(self) -> None:
-        self.robot_log_thread = threading.Thread(
-            target=self.robot_log_loop)
-        self.robot_log_thread.start()
-
-    def del_robot_log(self) -> None:
-        if hasattr(self, 'robot_log_thread'):
-            self.robot_log_thread.join()
-
-    def robot_log_loop(self) -> None:
-        while True:
-            now = time.time()
-            self.robot_log_loop_step()
-            if self.shm.exit_program == 1:
-                break
-            t_elapsed = time.time() - now
-            # ログの優先度は低いため周期を長くする
-            t_wait = self.config.t_intv * 2 - t_elapsed
-            if t_wait > 0:
-                time.sleep(t_wait)
 
     def init_monitor_loop(self) -> None:
         self.monitor_thread = threading.Thread(
