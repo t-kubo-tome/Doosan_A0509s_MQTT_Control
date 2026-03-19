@@ -170,15 +170,24 @@ class Doosan_CON(ControlBase):
                        "error_message": "Robot state is not NORMAL"}]
         return errors
 
-    def get_hand_state(self):
-        # TODO
+    def get_hand_state(
+        self,
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
         # ロボット固有の処理を含む
         # ハンドの状態値を取得して共有メモリに格納する
         width = None
         force = None
-        if self.qb_hand is not None:
-            width = self.qb_hand.getPosition()
-            force = self.qb_hand.getCurrent()
+        if self.hand is not None:
+            width, width_success, width_msg = self.hand.get_width()
+            if not width_success:
+                self.logger.error(f"Failed to get hand width: {width_msg}")
+            force, force_success, force_msg = self.hand.get_force()
+            if not force_success:
+                self.logger.error(f"Failed to get hand force: {force_msg}")
         if width is None:
             width = 0
         else:
@@ -192,32 +201,23 @@ class Doosan_CON(ControlBase):
         self.shm.hand_force = force
 
     def find_and_setup_hand(self, tool_id):
-        # TODO
-        # ダミー処理
-        connected = False
         tool_info = self.get_tool_info(tool_infos, tool_id)
         name = tool_info["name"]
-        hand = tool_classes[name]()
+        args = tool_info.get("args", {})
+        hand = tool_classes[name](**args)
         if tool_id != -1:
-            connected = hand.connect_and_setup()
-            if not connected:
-                raise ValueError(f"Failed to connect to hand: {name}")
+            try:
+                hand.connect_and_setup()
+            except Exception as e:
+                self.logger.error(f"Error connecting to hand: {name}")
+                self.logger.error(f"{self.format_error(e)}")
+                hand = None
         else:
             hand = None
         self.hand_name = name
         self.hand = hand
         self.tool_id = tool_id
         self.shm.tool_id = tool_id
-        # NOTE: ツールチェンジ時は同等の機能の追加が必要
-        # if tool_id != -1:
-        #     self.robot.SetToolDef(
-        #         tool_info["id_in_robot"], tool_info["tool_def"])
-        # self.robot.set_tool(tool_info["id_in_robot"])
-        # 本処理
-        max_timeout = 10  # seconds
-        self.qb_hand = qbSoftHandIndustryAPI(self.config.hand_ip, max_timeout)
-        if not self.qb_hand.isInitialized():
-            raise ValueError("Failed to initialize qbSoftHandIndustryAPI")
 
     def format_error(self, e: Exception) -> str:
         # ロボット固有の処理を含む
@@ -267,27 +267,63 @@ class Doosan_CON(ControlBase):
             stop_event.set()
         return is_success
 
-    def send_grip(self) -> None:
+    def send_grip(
+        self,
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
         # ロボット固有の処理を含む
-        # fully close the hand at half speed and minimum applied force (62.5% of max force is the minimum value that can be set)
-        if self.qb_hand is not None:
-            self.qb_hand.setClosure(100, 50, 62.5)
+        if self.hand is not None:
+            is_success, msg = self.hand.grip()
+        else:
+            is_success = False
+            msg = "Hand is not connected"
+        if not is_success:
+            self.logger.error(f"Failed to grip: {msg}")
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = msg
+                error_info['exception'] = ValueError(msg)
+            error_event.set()
+            stop_event.set()
+        return is_success
 
-    def send_release(self) -> None:
+    def send_release(
+        self,
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
         # ロボット固有の処理を含む
-        # reopen at full speed and full force
-        if self.qb_hand is not None:
-            self.qb_hand.setClosure(0, 100, 100)
+        if self.hand is not None:
+            is_success, msg = self.hand.release()
+        else:
+            is_success = False
+            msg = "Hand is not connected"
+        if not is_success:
+            self.logger.error(f"Failed to release: {msg}")
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = msg
+                error_info['exception'] = ValueError(msg)
+            error_event.set()
+            stop_event.set()
+        return is_success
 
     def release_hand(self) -> bool:
+        # ロボット固有の処理を含む
         self.logger.info("Release hand")
-        try:
-            self.send_release()
-            return True
-        except Exception as e:
-            self.logger.error("Error releasing hand")
-            self.logger.error(f"{self.format_error(e)}")
-            return False
+        if self.hand is not None:
+            is_success, msg = self.hand.release()
+        else:
+            is_success = False
+            msg = "Hand is not connected"
+        if not is_success:
+            self.logger.error(f"Error releasing hand: {msg}")
+        return is_success
 
     def enable(self) -> bool:
         self.logger.info("Enabling robot")

@@ -456,20 +456,12 @@ class ControlBase(ABC):
                 continue
             tool_corrected = tool
             if tool_corrected != last_tool_corrected:
-                try:
-                    if tool_corrected == 1:
-                        self.logger.info("Send grip command to hand")
-                        self.send_grip()
-                    elif tool_corrected == 2:
-                        self.logger.info("Send release command to hand")
-                        self.send_release()
-                except Exception as e:
-                    with lock:
-                        error_info['kind'] = "hand"
-                        error_info['msg'] = self.format_error(e)
-                        error_info['exception'] = e
-                    error_event.set()
-                    break
+                if tool_corrected == 1:
+                    self.logger.info("Send grip command to hand")
+                    self.send_grip()
+                elif tool_corrected == 2:
+                    self.logger.info("Send release command to hand")
+                    self.send_release()
             # ハンドの状態値を取得
             # 情報を常に取得するとアームの制御ループの処理間隔を乱し
             # 情報が必要なのはハンドに制御値を送った少し後だけなので以下のようにする
