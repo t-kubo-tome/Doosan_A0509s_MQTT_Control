@@ -7,11 +7,11 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 
-from ..robot.config import (
+from robot.config import (
     ABS_JOINT_LIMIT,
     T_INTV,
 )
-from ..robot import NamedSharedMemory
+from robot import NamedSharedMemory
 
 
 class JointMonitorPlot(QtWidgets.QWidget):

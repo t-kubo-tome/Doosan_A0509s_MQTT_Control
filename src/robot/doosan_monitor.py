@@ -1,8 +1,8 @@
 # Doosanの状態をモニタリングする
 from dataclasses import dataclass
 
-from ..common.monitor_base import MonitorBase, MonitorConfig
-from .config import (
+from common.monitor_base import MonitorBase, MonitorConfig
+from robot.config import (
     HAND_IP,
     MQTT_ROBOT_STATE_TOPIC,
     MQTT_SERVER,
@@ -12,7 +12,7 @@ from .config import (
     joint_unit_internal,
     joint_unit_external,
 )
-from .doosan_shared_memory import DoosanNamedSharedMemory
+from robot.doosan_shared_memory import DoosanNamedSharedMemory
 
 
 @dataclass

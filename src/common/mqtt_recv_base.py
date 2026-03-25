@@ -9,7 +9,7 @@ from datetime import datetime
 
 from paho.mqtt import client as mqtt
 
-from .shared_memory_base import NamedSharedMemoryBase
+from common.shared_memory_base import NamedSharedMemoryBase
 
 
 @dataclass

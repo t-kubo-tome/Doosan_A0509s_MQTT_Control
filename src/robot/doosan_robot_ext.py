@@ -2,7 +2,7 @@ import logging
 import time
 import threading
 
-from .doosan_robot import ROBOT_STATE, DoosanRobot
+from robot.doosan_robot import ROBOT_STATE, DoosanRobot
 
 
 class DoosanRobotExt(DoosanRobot):

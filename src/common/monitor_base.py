@@ -14,8 +14,8 @@ from typing import Any, Dict, List, TextIO
 import psutil
 from paho.mqtt import client as mqtt
 
-from .shared_memory_base import NamedSharedMemoryBase
-from .utils import AngleUnitConverter
+from common.shared_memory_base import NamedSharedMemoryBase
+from common.utils import AngleUnitConverter
 
 
 @dataclass

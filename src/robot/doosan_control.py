@@ -6,8 +6,8 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-from ..common.control_base import ControlBase, ControlConfig
-from .config import (
+from common.control_base import ControlBase, ControlConfig
+from robot.config import (
     HAND_IP,
     N_JOINTS,
     ROBOT_IP,
@@ -28,9 +28,9 @@ from .config import (
     use_normalize_target_to_nearest,
     use_second_speed_limit,
 )
-from .doosan_shared_memory import DoosanNamedSharedMemory
-from .doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
-from .tools import tool_classes, tool_infos
+from robot.doosan_shared_memory import DoosanNamedSharedMemory
+from robot.doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
+from robot.tools import tool_classes, tool_infos
 
 # n_windows *= int(0.008 / t_intv)
 reset_default_state = True

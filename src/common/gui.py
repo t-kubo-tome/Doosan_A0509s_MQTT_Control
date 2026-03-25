@@ -11,10 +11,10 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import Optional
 
-from .log import MicrosecondFormatter
-from .process_manager import ProcessManager
-from .utils import AngleUnitConverter
-from ..robot.config import (
+from common.log import MicrosecondFormatter
+from common.process_manager import ProcessManager
+from common.utils import AngleUnitConverter
+from robot.config import (
     ROBOT_NAME,
     SUPPORTED_COMMANDS_COMMON,
     SUPPORTED_COMMANDS_GUI_ONLY,
@@ -22,7 +22,7 @@ from ..robot.config import (
     joint_unit_internal,
     joint_unit_external,
 )
-from ..robot.tools import tool_ids
+from robot.tools import tool_ids
 
 
 class ToolChangePopup(tk.Toplevel):

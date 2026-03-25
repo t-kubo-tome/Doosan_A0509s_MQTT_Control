@@ -1,5 +1,5 @@
-from ..common.hand_control_base import HandControlBase
-from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
+from common.hand_control_base import HandControlBase
+from robot.qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
 
 
 class QbSoftHandIndustryControl(HandControlBase):

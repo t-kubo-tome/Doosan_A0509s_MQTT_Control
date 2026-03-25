@@ -1,6 +1,6 @@
 """ツール一覧。"""
-from .config import HAND_IP
-from .qbsofthand_industry_control import QbSoftHandIndustryControl
+from robot.config import HAND_IP
+from robot.qbsofthand_industry_control import QbSoftHandIndustryControl
 
 # 以降に使用するツール情報を追加すること
 

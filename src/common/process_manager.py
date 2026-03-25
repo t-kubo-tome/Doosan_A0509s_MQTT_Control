@@ -1,16 +1,16 @@
 import multiprocessing
 from multiprocessing import Process
 
-from .control_archiver import CON_Archiver
-from .ipc import TopicMemory
-from .monitor_gui import run_joint_monitor_gui
-from .robot import (
+from common.control_archiver import CON_Archiver
+from common.ipc import TopicMemory
+from common.monitor_gui import run_joint_monitor_gui
+from robot import (
     CON,
     MON,
     MQTT_Recv,
     NamedSharedMemory,
 )
-from .robot.config import ROBOT_NAME, topic_types
+from robot.config import ROBOT_NAME, topic_types
 
 
 class ProcessManager:

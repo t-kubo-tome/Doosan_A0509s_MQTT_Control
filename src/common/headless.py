@@ -15,9 +15,9 @@ from typing import Optional
 from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
-from .log import MicrosecondFormatter
-from .process_manager import ProcessManager
-from ..robot.config import (
+from common.log import MicrosecondFormatter
+from common.process_manager import ProcessManager
+from robot.config import (
     ROBOT_MODEL,
     ROBOT_VENDOR,
     SUPPORTED_COMMANDS_API_ONLY,

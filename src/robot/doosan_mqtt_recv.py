@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from ..common.mqtt_recv_base import MQTT_Recv_Base, MQTTConfig
-from .config import (
+from common.mqtt_recv_base import MQTT_Recv_Base, MQTTConfig
+from robot.config import (
     MQTT_CTRL_TOPIC,
     MQTT_MANAGE_TOPIC,
     MQTT_ROBOT_STATE_TOPIC,
@@ -12,7 +12,7 @@ from .config import (
     joint_unit_internal,
     joint_unit_external,
 )
-from .doosan_shared_memory import DoosanNamedSharedMemory
+from robot.doosan_shared_memory import DoosanNamedSharedMemory
 
 
 @dataclass
