@@ -1,4 +1,4 @@
-from ..common.hand_control import HandControlBase
+from ..common.hand_control_base import HandControlBase
 from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
 
 

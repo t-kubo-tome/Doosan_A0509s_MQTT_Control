@@ -4,8 +4,8 @@ import multiprocessing
 from multiprocessing import Process
 
 from .control_archiver import CON_Archiver
+from .ipc import TopicMemory
 from .monitor_gui import run_joint_monitor_gui
-from .shared_memory import TopicMemory
 from .robot import (
     CON,
     MON,

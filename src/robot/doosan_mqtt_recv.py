@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from ..common.mqtt_recv import MQTT_Recv_Base, MQTTConfig
+from ..common.mqtt_recv_base import MQTT_Recv_Base, MQTTConfig
 from .config import (
     MQTT_CTRL_TOPIC,
     MQTT_MANAGE_TOPIC,

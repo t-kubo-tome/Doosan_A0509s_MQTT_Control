@@ -1,7 +1,7 @@
 # Doosanの状態をモニタリングする
 from dataclasses import dataclass
 
-from ..common.monitor import MonitorBase, MonitorConfig
+from ..common.monitor_base import MonitorBase, MonitorConfig
 from .config import (
     HAND_IP,
     MQTT_ROBOT_STATE_TOPIC,

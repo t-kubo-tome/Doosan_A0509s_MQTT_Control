@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-from ..common.control import ControlBase, ControlConfig
+from ..common.control_base import ControlBase, ControlConfig
 from .config import (
     HAND_IP,
     N_JOINTS,

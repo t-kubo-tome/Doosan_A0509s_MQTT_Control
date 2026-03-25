@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..common.shared_memory import NamedSharedMemoryBase
+from ..common.shared_memory_base import NamedSharedMemoryBase
 
 
 class DoosanNamedSharedMemory(NamedSharedMemoryBase):
