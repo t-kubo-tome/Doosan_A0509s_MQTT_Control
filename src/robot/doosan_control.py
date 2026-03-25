@@ -70,26 +70,31 @@ class Doosan_CON(ControlBase):
         )
 
     def _init_other_than_config(self) -> None:
-        self.robot = DoosanRobotExt(
-            self.config.robot_ip,
-            "queue",
-            self.config.t_intv,
-            logger=self.robot_logger,
-            log_t_intv=self.config.t_intv * 2,
-        )
-        self.all_robot_state = {}
+        self.robot: DoosanRobotExt | None = None
 
-    def connect_robot(self) -> None:
+    def connect_robot(self) -> bool:
         # ロボット固有の処理を含む
         try:
+            if self.robot is None:
+                self.robot = DoosanRobotExt(
+                    self.config.robot_ip,
+                    "queue",
+                    self.config.t_intv,
+                    logger=self.robot_logger,
+                    log_t_intv=self.config.t_intv * 2,
+                )
             if not self.robot.start():
                 raise ValueError("Failed to start robot")
+            # NOTE: all_robot_stateはDoosanRobotExtの中に組み込めるかも
+            self.all_robot_state = {}
             self.init_monitor_loop()
             tool_id = int(os.environ["TOOL_ID"])
             self.find_and_setup_hand(tool_id)
+            return True
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
             self.logger.error(f"{self.format_error(e)}")
+            return False
 
     def get_current_pose_rt(self) -> List[float]:
         # ロボット固有の処理を含む
@@ -194,8 +199,7 @@ class Doosan_CON(ControlBase):
 
     def format_error(self, e: Exception) -> str:
         # ロボット固有の処理を含む
-        s = "\n"
-        s = s + "Error trace: " + traceback.format_exc() + "\n"
+        s = "Error trace: " + "\n" + traceback.format_exc()
         return s
 
     def move_joint_servo(
@@ -449,6 +453,7 @@ class Doosan_CON(ControlBase):
         raise NotImplementedError
 
     def del_robot(self) -> None:
-        self.robot.disable()
-        self.robot.stop()
-        self.robot.stop_log_if_exists()
+        if self.robot is not None:
+            self.robot.disable()
+            self.robot.stop()
+            self.robot.stop_log_if_exists()

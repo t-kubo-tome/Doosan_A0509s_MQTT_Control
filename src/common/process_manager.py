@@ -23,10 +23,6 @@ class ProcessManager:
         self.slave_mode_lock = multiprocessing.Lock()
         self.main_to_control_pipe, self.control_pipe = multiprocessing.Pipe()
         self.main_to_monitor_pipe, self.monitor_pipe = multiprocessing.Pipe()
-        self.state_recv_mqtt = False
-        self.state_monitor = False
-        self.state_control = False
-        self.state_monitor_gui = False
         self.log_queue = multiprocessing.Queue()
         self.command_queue = multiprocessing.Queue() if use_command_queue else None
         self.recvP = None
@@ -39,6 +35,26 @@ class ProcessManager:
             multiprocessing.Pipe()
         self.monitor_queue = multiprocessing.Queue()
 
+    @property
+    def state_recv_mqtt(self) -> bool:
+        return self.recvP is not None and self.recvP.is_alive()
+        
+    @property
+    def state_control(self) -> bool:
+        return self.ctrlP is not None and self.ctrlP.is_alive()
+    
+    @property
+    def state_control_archiver(self) -> bool:
+        return self.ctrl_archiverP is not None and self.ctrl_archiverP.is_alive()
+
+    @property
+    def state_monitor(self) -> bool:
+        return self.monP is not None and self.monP.is_alive()
+
+    @property
+    def state_monitor_gui(self) -> bool:
+        return self.monitor_guiP is not None and self.monitor_guiP.is_alive()
+
     def startRecvMQTT(self):
         self.recv = MQTT_Recv()
         self.recvP = Process(
@@ -48,7 +64,6 @@ class ProcessManager:
                   self.command_queue),
             name="MQTT-recv")
         self.recvP.start()
-        self.state_recv_mqtt = True
 
     def startMonitor(self, logging_dir: str | None = None, disable_mqtt: bool = False):
         self.mon = MON()
@@ -63,7 +78,6 @@ class ProcessManager:
                   disable_mqtt),
             name=f"{ROBOT_NAME}-monitor")
         self.monP.start()
-        self.state_monitor = True
 
     def startControl(self, logging_dir: str | None = None):
         self.ctrl = CON()
@@ -88,7 +102,6 @@ class ProcessManager:
                   ),
             name=f"{ROBOT_NAME}-control-archiver")
         self.ctrl_archiverP.start()
-        self.state_control = True
 
     def startMonitorGUI(self):
         self.monitor_guiP = Process(
@@ -96,41 +109,27 @@ class ProcessManager:
             name=f"{ROBOT_NAME}-monitor-gui",
         )
         self.monitor_guiP.start()
-        self.state_monitor_gui = True
 
     def stop_all_processes(self):
         self.shm.exit_program = 1
         self.shm.stop_realtime_control = 1
         if self.recvP is not None:
             self.recvP.join()
-            print("MQTT receive process joined.")
         if self.monP is not None:
             self.monP.join()
-            print("Monitor process joined.")
         if self.ctrlP is not None:
             self.ctrlP.join()
-            print("Control process joined.")
         if self.ctrl_archiverP is not None:
             self.ctrl_archiverP.join()
-            print("Control archiver process joined.")
         if self.monitor_guiP is not None:
             self.monitor_guiP.join()
-            print("Monitor GUI process joined.")
-        print("All subprocesses joined.")
         self.shm.release()
-        print("Shared memory released.")
         self.manager.shutdown()
-        print("Manager shutdown complete.")
         self.main_to_control_pipe.close()
-        print("Control main pipe closed.")
         self.control_pipe.close()
-        print("Control pipe closed.")
         self.main_to_monitor_pipe.close()
-        print("Monitor main pipe closed.")
         self.monitor_pipe.close()
-        print("Monitor pipe closed.")
         self.control_to_archiver_queue.close()
-        print("Control to archiver queue closed.")
 
     def _send_command_to_control(self, command):
         wait = command.get("wait", False)

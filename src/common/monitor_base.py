@@ -217,11 +217,12 @@ class MonitorBase(ABC):
         self.monitor_queue = monitor_queue
         self.logging_dir = logging_dir
 
-        self.init_realtime()
-        self.connect_robot()
-        self.connect_mqtt(disable_mqtt=disable_mqtt)
-        while True:
-            try:
+        try:
+            self.init_realtime()
+            self.connect_robot()
+            self.connect_mqtt(disable_mqtt=disable_mqtt)
+            # 処理ループ
+            while True:
                 if self.config.save_state:
                     with open(
                         os.path.join(self.logging_dir, "state.jsonl"), "a"
@@ -232,21 +233,26 @@ class MonitorBase(ABC):
                 if res == LoopResult.LOG_FILE_CHANGED:
                     self.get_logging_dir_and_change_log_file()
                 elif res == LoopResult.INTERRUPTED:
-                    self.disconnect_robot()
-                    if self.client is not None:
-                        self.client.loop_stop()
-                        self.client.disconnect()
-                    self.monitor_queue.close()
-                    self.shm.release()
-                    time.sleep(1)
-                    self.logger.info("Process stopped")
-                    self.handler.close()
-                    self.robot_handler.close()
                     break
                 elif res == LoopResult.NOT_CONNECTED:
                     self.reconnect_robot()
-            except Exception as e:
-                self.logger.error("Error in monitor")
-                self.logger.error(f"{self.format_error(e)}")
+        except Exception as e:
+            self.logger.error("Error in monitor:")
+            self.logger.error(f"{self.format_error(e)}")
+        finally:
+            self.disconnect_robot()
+            self.logger.info("Robot disconnected")
+            if self.client is not None:
+                self.client.loop_stop()
+                self.client.disconnect()
+            self.logger.info("MQTT client disconnected")
+            self.monitor_queue.close()
+            self.shm.release()
+            self.logger.info("Shared memory released")
+            self.logger.info("Process stopped")
+            time.sleep(1)
+            self.handler.close()
+            self.robot_handler.close()
+
 
     # STOP: オーバーライドの可能性なし

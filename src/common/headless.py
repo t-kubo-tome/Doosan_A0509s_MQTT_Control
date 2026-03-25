@@ -400,30 +400,32 @@ class HeadlessLoop:
         """クリーンアップ処理"""
         if self.logger:
             self.logger.info("Cleaning up...")
-        if self.pm is not None:
-            self.pm.stop_all_processes()
-        print("All subprocesses stopped.")
         if self.response_client is not None:
             self.response_client.loop_stop()
             self.response_client.disconnect()
-        print("Response MQTT client disconnected.")
+        if self.logger:
+            self.logger.info("Response MQTT client disconnected")
+        if self.pm is not None:
+            self.pm.stop_all_processes()
+        if self.logger:
+            self.logger.info("All processes stopped")
+        time.sleep(1)
         if self.listener is not None:
             self.listener.stop()
-        print("Logging listener stopped.")
         logging.shutdown()
-        print("Logging shutdown complete.")
 
     def mainloop(self) -> None:
         """メインループ"""
-        self._init()
-
-        # 起動時に自動接続
-        self.logger.info("Auto-connecting Robot...")
-        self._cmd_connect_robot()
-        self.logger.info("Auto-connecting MQTT...")
-        self._cmd_connect_mqtt()
-
         try:
+            self._init()
+
+            # NOTE: 現状は起動時に自動接続しているが、
+            # 将来的にはコマンドで接続してもよい
+            self.logger.info("Auto-connecting Robot...")
+            self._cmd_connect_robot()
+            self.logger.info("Auto-connecting MQTT...")
+            self._cmd_connect_mqtt()
+
             while self.running:
                 # コマンドキューからコマンドを取得
                 try:
@@ -432,5 +434,12 @@ class HeadlessLoop:
                 except queue.Empty:
                     # タイムアウト: ループを継続
                     pass
+        except Exception:
+            if self.logger:
+                self.logger.error(f"Unexpected error in main loop: ", exc_info=True)
+            else:
+                print("Unexpected error in main loop")
+                import traceback
+                traceback.print_exc()
         finally:
             self._cleanup()

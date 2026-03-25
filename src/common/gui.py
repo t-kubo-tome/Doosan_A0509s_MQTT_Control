@@ -838,10 +838,63 @@ class MQTTWin:
         self.update_gui_log_thread.start()
 
     def update_button_states_from_mqtt_control(self):
-        # MQTT制御に入れる状態にならなければチェックしない
-        if not self.pm.state_control or not self.pm.state_monitor:
-            self.root.after(1000, self.update_button_states_from_mqtt_control)
-        # MQTT制御に入れる状態であれば、MQTT制御状態に応じてボタンの有効無効を切り替える
+        # TODO
+        # ロボットとの接続の切り替えのタイミングでボタンの有効無効を切り替える
+        last_state_control = getattr(self, "last_state_control", False)
+        last_state_monitor = getattr(self, "last_state_monitor", False)
+        state_control = self.pm.state_control
+        state_monitor = self.pm.state_monitor
+        if (state_control != last_state_control or 
+            state_monitor != last_state_monitor):
+            kind1 = "disabled" if (not state_control or not state_monitor or not state_recv_mqtt) else "normal"
+            kind2 = "normal" if (not state_control or not state_monitor) else "disabled"
+            self.button["ConnectRobot"].config(state=kind2)
+            self.button["StartMQTTControl"].config(state=kind1)
+            self.button["StopMQTTControl"].config(state=kind1)
+            self.button["ClearError"].config(state=kind1)
+            self.button["SetAreaEnabled"].config(state=kind1)
+            self.button["DisableRobot"].config(state=kind1)
+            self.button["EnableRobot"].config(state=kind1)
+            self.button["ReleaseHand"].config(state=kind1)
+            self.button["TidyPose"].config(state=kind1)
+            self.button["ToolChange"].config(state=kind1)
+            self.button["DemoPutDownBox"].config(state=kind1)
+            self.button["LineCut"].config(state=kind1)
+            for joint in self.button["joint_jog"]:
+                self.button["joint_jog"][joint]["minus"].config(state=kind1)
+                self.button["joint_jog"][joint]["plus"].config(state=kind1)
+            for tcp in self.button["tcp_jog"]:
+                self.button["tcp_jog"][tcp]["minus"].config(state=kind1)
+                self.button["tcp_jog"][tcp]["plus"].config(state=kind1)            
+            self.last_state_control = state_control
+            self.last_state_monitor = state_monitor
+        # MQTTとの接続の切り替えのタイミングでボタンの有効無効を切り替える
+        last_state_recv_mqtt = getattr(self, "last_state_recv_mqtt", False)
+        state_recv_mqtt = self.pm.state_recv_mqtt
+        if state_recv_mqtt != last_state_recv_mqtt:
+            kind1 = "disabled" if (not state_control or not state_monitor or not state_recv_mqtt) else "normal"
+            kind2 = "normal" if (not state_recv_mqtt) else "disabled"
+            self.button["ConnectMQTT"].config(state=kind2)
+            self.button["StartMQTTControl"].config(state=kind1)
+            self.button["StopMQTTControl"].config(state=kind1)
+            self.button["ClearError"].config(state=kind1)
+            self.button["SetAreaEnabled"].config(state=kind1)
+            self.button["DisableRobot"].config(state=kind1)
+            self.button["EnableRobot"].config(state=kind1)
+            self.button["ReleaseHand"].config(state=kind1)
+            self.button["TidyPose"].config(state=kind1)
+            self.button["ToolChange"].config(state=kind1)
+            self.button["DemoPutDownBox"].config(state=kind1)
+            self.button["LineCut"].config(state=kind1)
+            for joint in self.button["joint_jog"]:
+                self.button["joint_jog"][joint]["minus"].config(state=kind1)
+                self.button["joint_jog"][joint]["plus"].config(state=kind1)
+            for tcp in self.button["tcp_jog"]:
+                self.button["tcp_jog"][tcp]["minus"].config(state=kind1)
+                self.button["tcp_jog"][tcp]["plus"].config(state=kind1)            
+            self.last_state_recv_mqtt = state_recv_mqtt
+        # MQTTによるリアルタイム制御に入れる状態であれば、
+        # 制御状態に応じてボタンの有効無効を切り替える
         last_state_mqtt_control = getattr(
             self, "last_state_mqtt_control", False)
         state_mqtt_control = self.pm.state_mqtt_control
@@ -934,7 +987,7 @@ class MQTTWin:
                     self.string_var_targets["grip"].set("")
         
         # 共有メモリの情報
-        sm = self.pm.ar.copy()
+        sm = self.pm.shm._ar.copy()
         sm_str = ",".join(str(int(round(x))) for x in sm)
         self.string_var_sm.set(sm_str)
         self.root.after(100, self.update_monitor)  # 100ms間隔で表示を更新
@@ -975,6 +1028,7 @@ class MQTTWin:
     def on_closing(self):
         """ウインドウを閉じるときの処理"""
         self.pm.stop_all_processes()
+        self.logger.info("All processes stopped")
         self.listener.stop()
         self.handler.close()
         logging.shutdown()

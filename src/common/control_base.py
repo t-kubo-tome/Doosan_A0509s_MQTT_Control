@@ -62,7 +62,7 @@ class ControlBase(ABC):
         pass
 
     @abstractmethod
-    def connect_robot(self) -> None:
+    def connect_robot(self) -> bool:
         pass
 
     @abstractmethod
@@ -1337,31 +1337,35 @@ class ControlBase(ABC):
         self.control_to_archiver_queue = control_to_archiver_queue
         self.monitor_queue = monitor_queue
 
-        self.connect_robot()
         self.init_realtime()
-        # リアルタイム性を考慮し、MQTTリアルタイム制御はメインスレッドで行う
-        # コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う
-        self.init_receive_command_loop()
-        # 外のループでMQTTリアルタイム制御の開始とプロセス終了を監視する
-        while True:
-            if self.shm.is_mqtt_control == 1:
-                # 内のループでMQTTリアルタイム制御を行う
-                self.mqtt_control_loop()
-                self.shm.is_mqtt_control = 0
-            if self.shm.exit_program == 1:
-                self.del_robot()
-                self.del_robot_log()
-                self.del_monitor_loop()
-                self.del_receive_command_loop()
-                self.shm.release()
-                self.control_to_archiver_queue.close()
-                self.monitor_queue.close()
-                time.sleep(1)
-                self.logger.info("Process stopped")
-                self.handler.close()
-                self.robot_handler.close()
-                break
-            # 監視間隔はリアルタイムでなくて良い
-            time.sleep(0.1)
+        # NOTE: connect_robotはenabledなどと同様boolを返すようにしているが
+        # 今後変更する可能性あり
+        is_connected = self.connect_robot()
+        if is_connected:
+            # リアルタイム性を考慮し、MQTTリアルタイム制御はメインスレッドで行う
+            # コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う
+            self.init_receive_command_loop()
+            # 外のループでMQTTリアルタイム制御の開始とプロセス終了を監視する
+            while True:
+                if self.shm.is_mqtt_control == 1:
+                    # 内のループでMQTTリアルタイム制御を行う
+                    self.mqtt_control_loop()
+                    self.shm.is_mqtt_control = 0
+                if self.shm.exit_program == 1:                
+                    break
+                # 監視間隔はリアルタイムでなくて良い
+                time.sleep(0.1)
+        self.del_robot()
+        self.del_monitor_loop()
+        self.del_receive_command_loop()
+        self.logger.info("Clean up threads")
+        self.shm.release()
+        self.control_to_archiver_queue.close()
+        self.monitor_queue.close()
+        self.logger.info("Shared memory released")
+        self.logger.info("Process stopped")
+        time.sleep(1)
+        self.handler.close()
+        self.robot_handler.close()
 
     # STOP: オーバーライドの可能性なし

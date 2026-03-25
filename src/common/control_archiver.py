@@ -83,14 +83,13 @@ class CON_Archiver:
                 # ログファイル変更時は大きいループを継続
                 if will_change_log_file:
                     self.get_logging_dir_and_change_log_file()
-            except Exception as e:
-                self.logger.error("Error in control archiver")
-                self.logger.error(e)
+            except Exception:
+                self.logger.error("Error in control archiver: ", exc_info=True)
             # プロセス終了時は大きいループを抜ける
             if self.shm.exit_program == 1:
                 self.shm.release()
                 self.control_to_archiver_queue.close()
-                time.sleep(1)
                 self.logger.info("Process stopped")
+                time.sleep(1)
                 self.handler.close()
                 break

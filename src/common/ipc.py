@@ -13,7 +13,7 @@ class TopicMemory:
         # コピーされるが、それでも同じ共有メモリを指すことになる
         self._store: DictProxy = manager.dict()
         self._locks: dict[str, threading.Lock] = {
-            topic: manager.Lock() for topic in topic_types
+            topic: threading.Lock() for topic in topic_types
         }
         for topic in topic_types:
             self._store[topic] = {}
@@ -29,9 +29,9 @@ class TopicMemory:
         """指定したトピックの種類のデータを読み取る(Lock付き)"""
         if topic_type not in self._locks:
             raise KeyError(f"未登録のトピックの種類: {topic_type}")
-        with self._locks[topic_type]:
-            # コピーを返す
-            return dict(self._store[topic_type])
+        # with self._locks[topic_type]:
+        # コピーを返す
+        return dict(self._store[topic_type])
 
     def read_all(self) -> dict:
         """全トピックの種類のスナップショットを取得"""

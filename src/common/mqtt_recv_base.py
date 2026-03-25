@@ -144,7 +144,7 @@ class MQTT_Recv_Base(ABC):
                 return
             self.command_queue.put(js)
         except Exception:
-            self.logger.error("Failed to handle command", exc_info=True)
+            self.logger.error("Failed to handle command: ", exc_info=True)
 
     def connect_mqtt(self):
         self.client = mqtt.Client(
@@ -171,30 +171,39 @@ class MQTT_Recv_Base(ABC):
         self.shm = self._get_make_shared_memory()(create=False)
         self.topic_memory = topic_memory
         self.command_queue = command_queue
-        self.connect_mqtt()
-        while True:
-            # 30分ごとに再登録
-            now = time.time()
-            if (self.last_registered is not None and
-                    self.last_registered + 60 * 30 < now):
-                self._register_to_manager(now)
 
-            # プロセス終了時
-            if self.shm.exit_program == 1:
-                info = {"devId": self.config.robot_uuid}
+        try:
+            self.connect_mqtt()
+            # 処理ループ
+            while True:
+                # 30分ごとに再登録
+                now = time.time()
+                if (self.last_registered is not None and
+                        self.last_registered + 60 * 30 < now):
+                    self._register_to_manager(now)
+
+                # プロセス終了時
+                if self.shm.exit_program == 1:
+                    break
+
+                time.sleep(1)
+        except Exception:
+            self.logger.error("Error in MQTT receive process: ", exc_info=True)
+        finally:
+            info = {"devId": self.config.robot_uuid}
+            if self.client is not None:
                 self.client.publish(
                     self.config.mqtt_manage_topic + "/unregister", json.dumps(info))
                 self.logger.info(
                     "publish to: " + self.config.mqtt_manage_topic + "/unregister")
                 self.client.loop_stop()
                 self.client.disconnect()
-                self.shm.release()
-                time.sleep(1)
-                self.logger.info("Process stopped")
-                self.handler.close()
-                break
-
+                self.logger.info("MQTT client disconnected")
+            self.shm.release()
+            self.logger.info("Shared memory released")
+            self.logger.info("Process stopped")
             time.sleep(1)
+            self.handler.close()
 
     def _on_mqtt_ctrl_topic(self, msg):
         js = json.loads(msg.payload)

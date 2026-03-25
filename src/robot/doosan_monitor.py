@@ -1,5 +1,6 @@
 # Doosanの状態をモニタリングする
 from dataclasses import dataclass
+import traceback
 
 from common.monitor_base import MonitorBase, MonitorConfig
 from robot.config import (
@@ -40,7 +41,9 @@ class Doosan_MON(MonitorBase):
         pass
 
     def format_error(self, e: Exception) -> str:
-        return str(e)
+        # ロボット固有の処理を含む
+        s = "Error trace: " + "\n" + traceback.format_exc()
+        return s
 
     def connect_robot(self) -> None:
         pass

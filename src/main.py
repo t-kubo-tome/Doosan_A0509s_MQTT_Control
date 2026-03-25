@@ -10,7 +10,9 @@ if __name__ == '__main__':
     # Freeze Support for Windows
     multiprocessing.freeze_support()
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="MetaworkMQTTプロトコルでのロボット制御を行うプログラム",
+    )
 
     # NOTE: 現在ロボットに付いているツールが何かを管理する方法がないので
     # ロボット制御コードの使用者に指定してもらう
@@ -33,7 +35,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--gui",
         action="store_true",
-        help="GUIを使用する",
+        help="GUIを使用する。使用しない場合はMQTTでコマンドを送る必要がある",
     )
     parser.add_argument(
         "--use-joint-monitor-plot",
