@@ -10,14 +10,7 @@ import multiprocessing
 import multiprocessing.shared_memory
 from typing import Optional
 
-import numpy as np
-
 from common.doosan_mqtt_control import ProcessManager
-from common.config import SHM_NAME, SHM_SIZE
-from common.doosan_tools import tool_infos
-
-
-tool_ids = [tool_info["id"] for tool_info in tool_infos]
 
 
 class MicrosecondFormatter(logging.Formatter):

@@ -22,10 +22,7 @@ from ..robot.config import (
     joint_unit_internal,
     joint_unit_external,
 )
-from ..robot.tools import tool_infos
-
-
-tool_ids = [tool_info["id"] for tool_info in tool_infos]
+from ..robot.tools import tool_ids
 
 
 class ToolChangePopup(tk.Toplevel):

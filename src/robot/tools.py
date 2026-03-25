@@ -1,6 +1,8 @@
+"""ツール一覧。"""
 from .config import HAND_IP
 from .qbsofthand_industry_control import QbSoftHandIndustryControl
 
+# 以降に使用するツール情報を追加すること
 
 tool_infos = [
     {
@@ -19,3 +21,6 @@ tool_infos = [
 tool_classes = {
     "qb_soft_hand_industry": QbSoftHandIndustryControl,
 }
+
+# 以降は触らないこと
+tool_ids = [tool_info["id"] for tool_info in tool_infos]
