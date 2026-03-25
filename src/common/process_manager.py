@@ -1,5 +1,3 @@
-# 複数プロセスを管理する
-
 import multiprocessing
 from multiprocessing import Process
 
@@ -16,6 +14,7 @@ from .robot.config import ROBOT_NAME, topic_types
 
 
 class ProcessManager:
+    """複数プロセスを管理するクラス."""
     def __init__(self, use_command_queue: bool = False):
         # mp.set_start_method('spawn')
         self.shm = NamedSharedMemory(create=True)

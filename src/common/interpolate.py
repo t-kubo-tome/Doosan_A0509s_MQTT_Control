@@ -2,6 +2,10 @@ import numpy as np
 
 
 class DelayedInterpolator:
+    """
+    リアルタイム時系列を線形補間するクラス。
+    基本的に、delay秒前の値を、そのdelay秒前の前後の入力値で線形補間した値として出力する。
+    """
     def __init__(
         self,
         delay: float = 0.1,

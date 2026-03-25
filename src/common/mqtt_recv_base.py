@@ -25,6 +25,7 @@ class MQTTConfig:
 
 
 class MQTT_Recv_Base(ABC):
+    """MQTTを受信して共有メモリに書き込むプロセスの基底クラス."""
     @abstractmethod
     def _get_config(self) -> MQTTConfig:
         pass

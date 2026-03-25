@@ -55,7 +55,7 @@ class HandControlBase(ABC):
 
 
 class DummyHandControl(HandControlBase):
-    """ダミーのハンド制御クラス."""
+    """ダミーのハンド制御クラス.通信接続が不要なツールを使用する場合に使用."""
     def __init__(self, **kwargs) -> None:
         self._conn = False
         self._width = 0

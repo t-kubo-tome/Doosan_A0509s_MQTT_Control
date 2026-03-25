@@ -18,6 +18,10 @@ def rad2deg_list(rad_list: list[float]) -> list[float]:
 
 
 class AngleUnitConverter:
+    """
+    角度の単位を変換するクラス.
+    内部単位と外部単位を指定して、相互に変換する関数を提供する.
+    """
     def __init__(
         self,
         unit_internal: Literal["rad", "deg"],

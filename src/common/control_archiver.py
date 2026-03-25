@@ -10,6 +10,11 @@ from ..robot import NamedSharedMemory
 
 
 class CON_Archiver:
+    """
+    制御値をログファイルに保存するプロセス。
+    制御と保存を分ける理由は、保存にかかる時間が、基本的には制御周期以下 (数ms以下) だが、
+    数百ms程度おきに、制御周期以上 (数十ms程度) かかることがあったため。
+    """
     def monitor_start(self, f: TextIO | None = None) -> bool:
         while True:
             # ログファイル変更時

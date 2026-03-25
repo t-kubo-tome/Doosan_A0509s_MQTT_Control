@@ -6,6 +6,7 @@ from .doosan_robot import ROBOT_STATE, DoosanRobot
 
 
 class DoosanRobotExt(DoosanRobot):
+    """Pybindで作成したDoosanRobotを拡張するクラス.ログの取得機能を追加."""
     def __init__(
         self,
         ip: str,
