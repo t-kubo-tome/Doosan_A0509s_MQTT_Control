@@ -66,10 +66,6 @@ class ControlBase(ABC):
         pass
 
     @abstractmethod
-    def real_to_vr_joint(self, joints: List[float]) -> List[float]:
-        pass
-
-    @abstractmethod
     def get_current_pose_rt(self) -> List[float]:
         pass
 

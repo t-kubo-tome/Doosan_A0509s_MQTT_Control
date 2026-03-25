@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..common.mqtt_recv import MQTT_Recv_Base, MQTTConfig
-from .shared_memory import NamedSharedMemory
 from .config import (
     MQTT_CTRL_TOPIC,
     MQTT_MANAGE_TOPIC,
@@ -13,6 +12,7 @@ from .config import (
     joint_unit_internal,
     joint_unit_external,
 )
+from .doosan_shared_memory import DoosanNamedSharedMemory
 
 
 @dataclass
@@ -33,8 +33,8 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
             joint_unit_external=joint_unit_external,
         )
 
-    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
-        return NamedSharedMemory
+    def _get_make_shared_memory(self) -> type[DoosanNamedSharedMemory]:
+        return DoosanNamedSharedMemory
 
     def _init_other_than_config(self) -> None:
         pass

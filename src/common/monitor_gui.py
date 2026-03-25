@@ -11,7 +11,7 @@ from ..robot.config import (
     ABS_JOINT_LIMIT,
     T_INTV,
 )
-from ..robot.shared_memory import NamedSharedMemory
+from ..robot import NamedSharedMemory
 
 
 class JointMonitorPlot(QtWidgets.QWidget):

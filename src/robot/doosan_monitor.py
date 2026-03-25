@@ -2,7 +2,6 @@
 from dataclasses import dataclass
 
 from ..common.monitor import MonitorBase, MonitorConfig
-from .shared_memory import NamedSharedMemory
 from .config import (
     HAND_IP,
     MQTT_ROBOT_STATE_TOPIC,
@@ -13,6 +12,7 @@ from .config import (
     joint_unit_internal,
     joint_unit_external,
 )
+from .doosan_shared_memory import DoosanNamedSharedMemory
 
 
 @dataclass
@@ -33,8 +33,8 @@ class Doosan_MON(MonitorBase):
             hand_ip=HAND_IP,
         )
 
-    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
-        return NamedSharedMemory
+    def _get_make_shared_memory(self) -> type[DoosanNamedSharedMemory]:
+        return DoosanNamedSharedMemory
 
     def _init_other_than_config(self) -> None:
         pass

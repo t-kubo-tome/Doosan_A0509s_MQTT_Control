@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 import numpy as np
 
 from ..common.control import ControlBase, ControlConfig
-from ..common.utils import deg2rad_list
 from .config import (
     HAND_IP,
     N_JOINTS,
@@ -29,9 +28,8 @@ from .config import (
     use_normalize_target_to_nearest,
     use_second_speed_limit,
 )
+from .doosan_shared_memory import DoosanNamedSharedMemory
 from .doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
-from .qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
-from .shared_memory import NamedSharedMemory
 from .tools import tool_classes, tool_infos
 
 # n_windows *= int(0.008 / t_intv)
@@ -45,8 +43,8 @@ class DoosanControlConfig(ControlConfig):
 
 
 class Doosan_CON(ControlBase):
-    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
-        return NamedSharedMemory
+    def _get_make_shared_memory(self) -> type[DoosanNamedSharedMemory]:
+        return DoosanNamedSharedMemory
 
     def _get_config(self) -> DoosanControlConfig:
         return DoosanControlConfig(
@@ -92,10 +90,6 @@ class Doosan_CON(ControlBase):
         except Exception as e:
             self.logger.error("Error in initializing robot: ")
             self.logger.error(f"{self.format_error(e)}")
-
-    def real_to_vr_joint(self, joints: List[float]) -> List[float]:
-        # ロボット固有の処理を含む
-        return deg2rad_list(joints)
 
     def get_current_pose_rt(self) -> List[float]:
         # ロボット固有の処理を含む
