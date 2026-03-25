@@ -14,7 +14,7 @@ import psutil
 from .filter import SMAFilter
 from .interpolate import DelayedInterpolator
 from .utils import StopWatch
-from .shared_memory import NamedSharedMemoryBase
+from .shared_memory_base import NamedSharedMemoryBase
 
 
 @dataclass
