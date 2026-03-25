@@ -15,6 +15,7 @@ from ..robot.config import (
     ROBOT_NAME,
     SUPPORTED_COMMANDS_COMMON,
     SUPPORTED_COMMANDS_GUI_ONLY,
+    topic_types,
 )
 from ..robot.process_manager import ProcessManager
 from ..robot.tools import tool_infos
@@ -482,12 +483,6 @@ class MQTTWin:
 
 #        tk.Label(self.root, text="Topics").grid(
 #            row=row, column=0, padx=2, pady=10, sticky="w", columnspan=8)
-        topic_types = [
-            "mgr/register",
-            "dev",
-            "robot",
-            "control",
-        ]
         self.string_var_topics = {
             topic: tk.StringVar() for topic in topic_types}
         self.topic_monitors = {}

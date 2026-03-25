@@ -104,6 +104,9 @@ save_control = SAVE
 
 tidy_joint = [0.0, 0.0, -90.0, 0.0, -90.0, 0.0]
 
+# ロボット制御コード内で監視する情報
+topic_types = ["mgr/register", "dev", "robot", "control"]
+
 # ロボット固有のパラメータ
 servo_mode = 0x202
 

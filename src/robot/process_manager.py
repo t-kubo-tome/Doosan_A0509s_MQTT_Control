@@ -6,7 +6,7 @@ from multiprocessing import Process
 from ..common.control_save import CON_Archiver
 from ..common.monitor_gui import run_joint_monitor_gui
 from ..common.shared_memory import TopicMemory
-from .config import ROBOT_NAME
+from .config import ROBOT_NAME, topic_types
 from .doosan_control import Doosan_CON
 from .doosan_monitor import Doosan_MON
 from .doosan_mqtt_recv import Doosan_MQTT_Recv
@@ -18,7 +18,6 @@ class ProcessManager:
         # mp.set_start_method('spawn')
         self.shm = NamedSharedMemory(create=True)
         self.manager = multiprocessing.Manager()
-        topic_types = ["mgr/register", "dev", "robot", "control"]
         self.topic_memory = TopicMemory(self.manager, topic_types=topic_types)
         self.slave_mode_lock = multiprocessing.Lock()
         self.main_to_control_pipe, self.control_pipe = multiprocessing.Pipe()
