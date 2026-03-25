@@ -107,6 +107,11 @@ tidy_joint = [0.0, 0.0, -90.0, 0.0, -90.0, 0.0]
 # ロボット制御コード内で監視する情報
 topic_types = ["mgr/register", "dev", "robot", "control"]
 
+# ロボット制御コード内で扱う関節角度の単位
+joint_unit_internal = "deg"
+# ロボット制御コード外で扱う関節角度の単位
+joint_unit_external = "rad"
+
 # ロボット固有のパラメータ
 servo_mode = 0x202
 

@@ -1,3 +1,4 @@
+from typing import Literal
 import time
 
 import numpy as np
@@ -14,6 +15,37 @@ def rad2deg(rad):
 
 def rad2deg_list(rad_list: list[float]) -> list[float]:
     return [rad2deg(rad) for rad in rad_list]
+
+
+class AngleUnitConverter:
+    def __init__(
+        self,
+        unit_internal: Literal["rad", "deg"],
+        unit_external: Literal["rad", "deg"],
+    ) -> None:
+        assert unit_internal in ["rad", "deg"]
+        assert unit_external in ["rad", "deg"]
+        if unit_internal == unit_external:
+            self._to_internal = lambda x: x
+            self._to_external = lambda x: x
+        elif unit_internal == "rad" and unit_external == "deg":
+            self._to_internal = deg2rad
+            self._to_external = rad2deg
+        elif unit_internal == "deg" and unit_external == "rad":
+            self._to_internal = rad2deg
+            self._to_external = deg2rad
+
+    def to_internal(self, value: float) -> float:
+        return self._to_internal(value)
+
+    def to_internal_list(self, value_list: list[float]) -> list[float]:
+        return [self.to_internal(value) for value in value_list]
+
+    def to_external(self, value: float) -> float:
+        return self._to_external(value)
+
+    def to_external_list(self, value_list: list[float]) -> list[float]:
+        return [self.to_external(value) for value in value_list]        
 
 
 class StopWatch:

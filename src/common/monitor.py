@@ -15,7 +15,7 @@ import psutil
 from paho.mqtt import client as mqtt
 
 from .shared_memory import NamedSharedMemoryBase
-from .utils import rad2deg_list
+from .utils import AngleUnitConverter
 
 
 @dataclass
@@ -23,6 +23,8 @@ class MonitorConfig:
     mqtt_server: str
     mqtt_robot_state_topic: str  # "robot/<robot_uuid>" 形式
     save_state: bool
+    joint_unit_internal: str
+    joint_unit_external: str
 
 
 class LoopResult(Enum):
@@ -79,6 +81,8 @@ class MonitorBase(ABC):
     def __init__(self) -> None:
         self.config = self._get_config()
         self._init_other_than_config()
+        self._angle_unit_converter = AngleUnitConverter(
+            self.config.joint_unit_internal, self.config.joint_unit_external)
 
     def init_realtime(self) -> None:
         os_used = sys.platform
@@ -158,7 +162,7 @@ class MonitorBase(ABC):
             if f is not None and self.shm.is_mqtt_control == 1:
                 joints = actual_joint_js.get("joints")
                 if joints is not None:
-                    joints = rad2deg_list(joints)
+                    joints = self._angle_unit_converter.to_external_list(joints)
                 datum = dict(
                     time=now,
                     kind="state",

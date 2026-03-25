@@ -10,6 +10,8 @@ from .config import (
     ROBOT_IP,
     ROBOT_UUID,
     SAVE,
+    joint_unit_internal,
+    joint_unit_external,
 )
 
 
@@ -25,6 +27,8 @@ class Doosan_MON(MonitorBase):
             mqtt_server=MQTT_SERVER,
             mqtt_robot_state_topic=MQTT_ROBOT_STATE_TOPIC + "/" + ROBOT_UUID,
             save_state=SAVE,
+            joint_unit_internal=joint_unit_internal,
+            joint_unit_external=joint_unit_external,
             robot_ip=ROBOT_IP,
             hand_ip=HAND_IP,
         )

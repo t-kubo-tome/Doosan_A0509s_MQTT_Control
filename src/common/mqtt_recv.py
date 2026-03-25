@@ -20,6 +20,8 @@ class MQTTConfig:
     mqtt_ctrl_topic: str
     mqtt_manage_topic: str
     mqtt_robot_state_topic: str
+    joint_unit_internal: str
+    joint_unit_external: str
 
 
 class MQTT_Recv_Base(ABC):
@@ -37,6 +39,12 @@ class MQTT_Recv_Base(ABC):
 
     @abstractmethod
     def _interpret_mqtt_ctrl_topic(self, js) -> None:
+        """
+        MQTT制御トピックの内容を解釈して共有メモリに反映。
+        この実装内で、js中の関節角度(例: joints)が存在する場合、
+        必ずself._angle_unit_converter.to_internal(joints)
+        で角度を内部単位に変換したうえで共有メモリに反映すること。
+        """
         pass
 
     def __init__(self):

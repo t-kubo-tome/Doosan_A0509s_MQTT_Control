@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..common.mqtt_recv import MQTT_Recv_Base, MQTTConfig
-from ..common.utils import rad2deg_list
 from .shared_memory import NamedSharedMemory
 from .config import (
     MQTT_CTRL_TOPIC,
@@ -11,6 +10,8 @@ from .config import (
     MQTT_SERVER,
     ROBOT_MODEL_ENV,
     ROBOT_UUID,
+    joint_unit_internal,
+    joint_unit_external,
 )
 
 
@@ -28,6 +29,8 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
             mqtt_ctrl_topic=MQTT_CTRL_TOPIC,
             mqtt_manage_topic=MQTT_MANAGE_TOPIC,
             mqtt_robot_state_topic=MQTT_ROBOT_STATE_TOPIC,
+            joint_unit_internal=joint_unit_internal,
+            joint_unit_external=joint_unit_external,
         )
 
     def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
@@ -38,7 +41,8 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
 
     def _interpret_mqtt_ctrl_topic(self, js: dict[str, Any]) -> None:
         if "joints" in js:
-            self.shm.joint_target = rad2deg_list(js["joints"])
+            self.shm.joint_target = self._angle_unit_converter.to_internal(
+                js["joints"])
 
         if "grip" in js:
             right_grip = js['grip'][1]

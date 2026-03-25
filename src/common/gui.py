@@ -9,8 +9,9 @@ import time
 import tkinter as tk
 import multiprocessing
 from tkinter import scrolledtext
-from typing import List, Optional
+from typing import Optional
 
+from .log import MicrosecondFormatter
 from .process_manager import ProcessManager
 from .utils import AngleUnitConverter
 from ..robot.config import (
@@ -18,10 +19,10 @@ from ..robot.config import (
     SUPPORTED_COMMANDS_COMMON,
     SUPPORTED_COMMANDS_GUI_ONLY,
     topic_types,
+    joint_unit_internal,
+    joint_unit_external,
 )
 from ..robot.tools import tool_infos
-from .log import MicrosecondFormatter
-from .utils import rad2deg_list
 
 
 tool_ids = [tool_info["id"] for tool_info in tool_infos]
@@ -127,6 +128,9 @@ class MQTTWin:
         self.gui_log_queue = queue.Queue()
         self.supported_commands = (
             SUPPORTED_COMMANDS_COMMON + SUPPORTED_COMMANDS_GUI_ONLY
+        )
+        self._angle_unit_converter = AngleUnitConverter(
+            joint_unit_internal, joint_unit_external
         )
         self.logger.info("Starting Process!")
 
@@ -868,9 +872,6 @@ class MQTTWin:
             self.last_state_mqtt_control = state_mqtt_control
         self.root.after(1000, self.update_button_states_from_mqtt_control)
 
-    def vr_to_real_joint(self, joints: List[float]) -> List[float]:
-        return rad2deg_list(joints)
-
     def update_monitor(self):
         # モニタープロセスからの情報
         topic_type = "robot"
@@ -923,7 +924,7 @@ class MQTTWin:
 
                 joints = log.get("joints")
                 if joints is not None:
-                    joints = self.vr_to_real_joint(joints)
+                    joints = self._angle_unit_converter.to_internal_list(joints)
                     for i in range(6):
                         self.string_var_targets[f"J{i + 1}"].set(f"{joints[i]:.2f}")
                 else:
