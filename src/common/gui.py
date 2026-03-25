@@ -11,13 +11,14 @@ import multiprocessing
 from tkinter import scrolledtext
 from typing import List, Optional
 
+from .process_manager import ProcessManager
+from .utils import AngleUnitConverter
 from ..robot.config import (
     ROBOT_NAME,
     SUPPORTED_COMMANDS_COMMON,
     SUPPORTED_COMMANDS_GUI_ONLY,
     topic_types,
 )
-from ..robot.process_manager import ProcessManager
 from ..robot.tools import tool_infos
 from .log import MicrosecondFormatter
 from .utils import rad2deg_list

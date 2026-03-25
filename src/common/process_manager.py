@@ -3,14 +3,16 @@
 import multiprocessing
 from multiprocessing import Process
 
-from ..common.control_save import CON_Archiver
-from ..common.monitor_gui import run_joint_monitor_gui
-from ..common.shared_memory import TopicMemory
-from .config import ROBOT_NAME, topic_types
-from .doosan_control import Doosan_CON
-from .doosan_monitor import Doosan_MON
-from .doosan_mqtt_recv import Doosan_MQTT_Recv
-from .shared_memory import NamedSharedMemory
+from .control_save import CON_Archiver
+from .monitor_gui import run_joint_monitor_gui
+from .shared_memory import TopicMemory
+from .robot import (
+    CON,
+    MON,
+    MQTT_Recv,
+    NamedSharedMemory,
+)
+from .robot.config import ROBOT_NAME, topic_types
 
 
 class ProcessManager:
@@ -39,7 +41,7 @@ class ProcessManager:
         self.monitor_queue = multiprocessing.Queue()
 
     def startRecvMQTT(self):
-        self.recv = Doosan_MQTT_Recv()
+        self.recv = MQTT_Recv()
         self.recvP = Process(
             target=self.recv.run_proc,
             args=(self.topic_memory,
@@ -50,7 +52,7 @@ class ProcessManager:
         self.state_recv_mqtt = True
 
     def startMonitor(self, logging_dir: str | None = None, disable_mqtt: bool = False):
-        self.mon = Doosan_MON()
+        self.mon = MON()
         self.monP = Process(
             target=self.mon.run_proc,
             args=(self.topic_memory,
@@ -65,7 +67,7 @@ class ProcessManager:
         self.state_monitor = True
 
     def startControl(self, logging_dir: str | None = None):
-        self.ctrl = Doosan_CON()
+        self.ctrl = CON()
         self.ctrlP = Process(
             target=self.ctrl.run_proc,
             args=(self.control_pipe,
