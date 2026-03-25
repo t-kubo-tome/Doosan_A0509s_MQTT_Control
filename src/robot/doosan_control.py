@@ -79,7 +79,6 @@ class Doosan_CON(ControlBase):
             logger=self.robot_logger,
             log_t_intv=self.config.t_intv * 2,
         )
-        self.qb_hand: qbSoftHandIndustryAPI | None = None
         self.all_robot_state = {}
 
     def connect_robot(self) -> None:
