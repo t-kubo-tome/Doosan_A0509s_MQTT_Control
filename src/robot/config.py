@@ -119,6 +119,5 @@ speed_limits = np.array(speed_limits)
 eff_speed_limits = speed_limits * speed_limit_ratio
 accel_limits = np.array(accel_limits)
 eff_accel_limits = accel_limits * accel_limit_ratio
-abs_joint_limit = abs_joint_limit
 abs_joint_limit = np.array(abs_joint_limit)
 abs_joint_soft_limit = abs_joint_limit - 10
