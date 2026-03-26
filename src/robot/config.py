@@ -96,20 +96,22 @@ speed_limit_ratio = 0.5
 accel_limits = [s ** 2 for s in speed_limits]
 accel_limit_ratio = 0.5
 
+# リアルタイム制御でロボットに送る制御値の種類
 control_interface: Literal["position", "velocity"] = "velocity"
 
-move_robot = move
-save_control = save
-
+# ロボットの整頓時の関節角度
 tidy_joint = [0.0, 0.0, -90.0, 0.0, -90.0, 0.0]
 
 # ロボット制御コード内で監視する情報
 topic_types = ["mgr/register", "dev", "robot", "control"]
 
 # ロボット制御コード内で扱う関節角度の単位
-joint_unit_internal = "deg"
+joint_unit_internal: Literal["deg", "rad"] = "deg"
 # ロボット制御コード外で扱う関節角度の単位
-joint_unit_external = "rad"
+joint_unit_external: Literal["deg", "rad"] = "rad"
+
+# ロボットからの状態値の取得を実際にはプロセスで行うか
+real_monitor_process: Literal["control", "monitor"] = "control"
 
 # ロボット固有のパラメータ
 servo_mode = 0x202

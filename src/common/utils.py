@@ -1,5 +1,6 @@
-from typing import Literal
+from abc import abstractmethod
 import time
+from typing import Literal
 
 import numpy as np
 
@@ -94,3 +95,13 @@ class StopWatch:
         for i, lap in enumerate(self.laps):
             s += f"| {i} | {lap['lap']*1000:.3f} | {lap['split']*1000:.3f} | {lap['msg']} |\n"
         return s
+
+
+def conditional_abstractmethod(condition):
+    """条件付きで抽象メソッドにするデコレーター。"""
+    def decorator(func):
+        if condition:
+            return abstractmethod(func)
+        else:
+            return func
+    return decorator

@@ -2,9 +2,10 @@ import multiprocessing
 from multiprocessing import Process
 
 from common.control_archiver import CON_Archiver
+from common.control_process import ControlProcess
 from common.ipc import TopicMemory
 from common.monitor_gui import run_joint_monitor_gui
-from robot import CON, MON, MQTT_Recv
+from robot import MON, MQTT_Recv
 from robot.config import robot_name, topic_types
 from robot.shared_memory import NamedSharedMemory
 
@@ -78,7 +79,7 @@ class ProcessManager:
         self.monP.start()
 
     def startControl(self, logging_dir: str | None = None):
-        self.ctrl = CON()
+        self.ctrl = ControlProcess()
         self.ctrlP = Process(
             target=self.ctrl.run_proc,
             args=(self.control_pipe,

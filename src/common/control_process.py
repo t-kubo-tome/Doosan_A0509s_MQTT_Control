@@ -3,8 +3,8 @@ import os
 import sys
 import threading
 import time
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, TextIO
+import traceback
+from typing import Any, Dict, List
 
 import modern_robotics as mr
 import numpy as np
@@ -13,135 +13,256 @@ import psutil
 from common.filter import SMAFilter
 from common.interpolate import DelayedInterpolator
 from common.utils import StopWatch
-from robot import config
+from robot import config, ControlHardware
 from robot.shared_memory import NamedSharedMemory
 from robot.tools import tool_classes, tool_infos
 
 
-class ControlBase(ABC):
-    """ロボットの制御ループの基底クラス."""
-
-    # BEGIN: 実装必須
+class ControlProcess:
+    """ロボットの制御プロセス。"""
 
     # BEGIN: 汎用
 
-    @abstractmethod
-    def _on_init(self) -> None:
-        """ロボット固有の初期化処理を行う。__init__内で呼び出される。"""
-        pass
+    def __init__(self) -> None:
+        # NOTE: robot_loggerをrun_processで初期化するため、
+        # ControlHardwareを__init__内で初期化できないため、
+        # このような実装にしている
+        self.robot: ControlHardware | None = None
 
-    @abstractmethod
     def format_error(self, e: Exception) -> str:
         """例外をフォーマットする。"""
-        pass
+        if self.robot is not None:
+            return self.robot.format_error(e)
+        else:
+            s = "Error trace: " + "\n" + traceback.format_exc()
+        return s
 
-    @abstractmethod
     def del_robot(self) -> None:
         """ロボットのインスタンスを削除する。"""
-        pass
+        if self.robot is not None:
+            self.robot.disable()
+            self.robot.stop()
+            self.robot.on_del()
+            self.robot = None
 
     # END: 汎用
 
     # BEGIN: 受信コマンド
 
-    @abstractmethod
     def connect_robot(self) -> bool:
         """ロボットに接続する。例外の送出は禁止。"""
-        pass
+        try:
+            # NOTE: robot_loggerをrun_processで初期化するため、
+            # ControlHardwareを__init__内で初期化できないため、
+            # このような実装にしている
+            # NOTE: 再接続するためには、APIインスタンスの再生成
+            # だけでなく、呼び出しプロセスの再起動も必要かもしれない
+            if self.robot is None:
+                self.robot = ControlHardware(self)
+            if not self.robot.start():
+                raise ValueError("Failed to start robot")
+            # NOTE: all_robot_stateはDoosanRobotExtの中に組み込めるかも
+            self.all_robot_state = {}
+            # ロボットによっては別のモニタプロセスで状態値を取得できないので
+            # 制御プロセス中の別のスレッドで取得する
+            self.init_monitor_loop()
+            # NOTE: 接続を何度も可能にする場合、ツールが複数ある場合は、
+            # 最初のツールIDではだめな場合がある
+            tool_id = int(os.environ["TOOL_ID"])
+            # NOTE: ここでハンドの接続に成功したかどうか判定してもよい
+            # その場合ハンドの接続に成功しなくても使えるオプションを設けるとよい
+            self.find_and_setup_hand(tool_id)
+            return True
+        except Exception as e:
+            self.logger.error("Error in initializing robot: ")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def enable(self) -> bool:
         """ロボットのモーターの電源をONにする。例外の送出は禁止。"""
-        pass
+        self.logger.info("Enabling robot")
+        try:
+            if not self.robot.enable():
+                raise ValueError("Failed to enable robot")
+            return True
+        except Exception as e:
+            self.logger.error("Error enabling robot")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def disable(self) -> bool:
         """ロボットのモーターの電源をOFFにする。例外の送出は禁止。"""
-        pass
+        self.logger.info("Disabling robot")
+        try:
+            if not self.robot.disable():
+                raise ValueError("Failed to disable robot")
+            return True
+        except Exception as e:
+            self.logger.error("Error disabling robot")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def set_area_enabled(self, enable: bool) -> bool:
         """ロボットのエリア制限をON/OFFする。例外の送出は禁止。"""
-        pass
+        self.logger.info(f"Setting area enabled: {enable}")
+        try:
+            if not self.robot.set_area_enabled(enable):
+                raise ValueError("Failed to set area enabled")
+        except Exception as e:
+            self.logger.error("Error setting area enabled")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def tidy_pose(self) -> bool:
         """ロボットをデフォルトの姿勢に移動させる。例外の送出は禁止。"""
-        pass
+        self.logger.info("Tidy pose")
+        try:
+            if not self.robot.move_joint(*config.tidy_joint):
+                raise ValueError("Failed to move to tidy pose")
+            return True
+        except Exception as e:
+            self.logger.error("Error moving to tidy pose")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def move_joint(self, joints: List[float]) -> bool:
         """ロボットを関節空間で移動させる。例外の送出は禁止。"""
-        pass
+        self.logger.info("Move joint")
+        try:
+            ret = self.robot.move_joint(*joints)
+            if not ret:
+                raise ValueError("Failed to move to joint pose")
+            return True
+        except Exception as e:
+            self.logger.error("Error moving to joint pose")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def clear_error(self) -> bool:
         """ロボットのエラーをクリアする。例外の送出は禁止。"""
-        pass
+        self.logger.info("Clear error")
+        try:
+            if not self.robot.clear_error():
+                raise ValueError("Failed to clear error")
+            return True
+        except Exception as e:
+            self.logger.error("Error clearing error")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def jog_joint(self, joint: int, direction: float) -> bool:
         """関節をジョグする。例外の送出は禁止。"""
-        pass
+        try:
+            if self.shm.is_joint_state_received != 1:
+                raise ValueError("Joint jog requires joint state to be monitored but currently not")
+            # joint state
+            joints = self.shm.joint_state.copy()
+            joints = np.asarray(joints)
+            joints[joint] += direction
+            joints = joints.tolist()
+            is_success = self.robot.move_joint(*joints)
+            if not is_success:
+                raise ValueError("move_joint failed")
+            return True
+        except Exception as e:
+            self.logger.error("Error during joint jog")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def jog_tcp(self, axis: int, direction: float) -> bool:
         """TCPをジョグする。例外の送出は禁止。"""
-        pass
+        try:
+            if self.shm.is_pose_state_received != 1:
+                raise ValueError("TCP jog requires TCP state to be monitored but currently not")
+            # TCP state
+            poses = self.shm.pose_state.copy()
+            poses = np.asarray(poses)
+            poses[axis] += direction
+            poses = poses.tolist()
+            is_success = self.robot.move_pose(*poses)
+            if not is_success:
+                raise ValueError("move_pose failed")
+            return True
+        except Exception as e:
+            self.logger.error("Error during TCP jog")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
     # END: 受信コマンド
 
-    # BEGIN: 規定動作
-
-    @abstractmethod
-    def _tool_change_impl(self, next_tool_id: int) -> None:
-        """ツールを切り替える。"""
-        pass
-
-    @abstractmethod
-    def _demo_put_down_box_impl(self) -> bool:
-        """箱を動かすデモ。例外の送出は禁止。"""
-        pass
-
-    @abstractmethod
-    def _line_cut_impl(self) -> bool:
-        """箱を切るデモ。例外の送出は禁止。"""
-        pass
-
-    # END: 規定動作
-
     # BEGIN: MQTT制御
 
-    @abstractmethod
     def enter_servo_mode(self) -> None:
         """ロボットをサーボモードに切り替える。"""
-        pass
+        # self.shm.maybe_slave_modeは0のとき必ず通常モード。
+        # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
+        # 変化前後の短い時間は通常モードの可能性がある。
+        # 順番固定
+        with self.slave_mode_lock:
+            self.shm.maybe_slave_mode = 1
+            self.robot.enter_servo_mode()
 
-    @abstractmethod
     def leave_servo_mode(self) -> None:
         """ロボットをサーボモードから離れる。"""
-        pass
+        # self.shm.maybe_slave_modeは0のとき必ず通常モード。
+        # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
+        # 変化前後の短い時間は通常モードの可能性がある。
+        # 順番固定
+        self.robot.leave_servo_mode()
+        self.shm.maybe_slave_mode = 0
 
-    @abstractmethod
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
         """タイムアウトエラーが発生したときに自動的に回復するかどうか。例外の送出は禁止。"""
-        pass
+        self.logger.info("Should recover automatic on timeout error")
+        try:
+            ret = self.robot.should_recover_automatic_on_timeout_error(e_leave)
+            if not ret:
+                raise ValueError("Failed to determine if automatic recovery is possible on timeout error")
+            return True
+        except Exception as e:
+            self.logger.error("Error during automatic recovery check on timeout error")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def recover_automatic_on_timeout_error(self) -> bool:
         """タイムアウトエラーが発生したときに自動的に回復する処理を行う。例外の送出は禁止。"""
-        pass
+        self.logger.info("Attempting automatic recover from timeout error")
+        try:
+            ret = self.robot.recover_automatic_on_timeout_error()
+            if not ret:
+                raise ValueError("Failed to recover from timeout error")
+            return True
+        except Exception as e:
+            self.logger.error("Error during automatic recover on timeout error")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    @abstractmethod
     def recover_automatic_on_recoverable_error(self) -> bool:
         """回復可能なエラーが発生したときに自動的に回復する処理を行う。例外の送出は禁止。"""
-        pass
+        self.logger.info("Attempting automatic recover from recoverable error")
+        try:
+            ret = self.robot.recover_automatic_on_recoverable_error()
+            if not ret:
+                raise ValueError("Failed to recover from recoverable error")
+            return True
+        except Exception as e:
+            self.logger.error("Error during automatic recover on recoverable error")
+            self.logger.error(f"{self.format_error(e)}")
+            return False
 
-    # END: MQTT制御
+    def on_step_start_in_control_loop(self) -> None:
+        self.robot.on_step_start_in_control_loop()
 
-    # BEGIN: リアルタイム制御
+    def should_wait_control_loop(self) -> bool:
+        self.robot.should_wait_control_loop()
 
-    @abstractmethod
+    def is_ready_to_stop(self) -> bool:
+        # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
+        # ロボットを停止させてスレーブモードを解除可能な状態になる
+        # Cobotta Proに必要な処理であるが、他のロボットにあっても
+        # よいため使用している
+        return (self.control == self.last_control).all()
+
     def move_joint_servo(
         self,
         control: List[float],
@@ -151,9 +272,19 @@ class ControlBase(ABC):
         stop_event,
     ) -> bool:
         """関節のスレーブモードでの制御値をロボットに送る。例外の送出は禁止。"""
-        pass
+        try:
+            if not self.robot.move_joint_servo(*control):
+                raise ValueError("Failed to send servoJ command")
+            return True
+        except Exception as e:
+            with lock:
+                error_info['kind'] = "robot"
+                error_info['msg'] = str(e)
+                error_info['exception'] = e
+            error_event.set()
+            stop_event.set()
+            return False
 
-    @abstractmethod
     def move_joint_servo_by_vel(
         self,
         control: List[float],
@@ -163,72 +294,48 @@ class ControlBase(ABC):
         stop_event,
     ) -> bool:
         """関節のスレーブモードでの速度制御値をロボットに送る。例外の送出は禁止。"""
-        pass
+        try:
+            if not self.robot.move_joint_servo_by_vel(*control):
+                raise ValueError("Failed to send servoJ command")
+            return True
+        except Exception as e:
+            with lock:
+                error_info['kind'] = "robot"
+                error_info['msg'] = str(e)
+                error_info['exception'] = e
+            error_event.set()
+            stop_event.set()
+            return False
 
-    # END: リアルタイム制御
+    # END: MQTT制御
 
     # BEGIN: 状態取得
-    # NOTE: 例外の送出を禁止するかどうか。
 
-    @abstractmethod
     def get_current_pose_rt(self) -> List[float]:
-        pass
+        return self.robot.get_current_pose_rt()
 
-    @abstractmethod
     def get_current_joint_rt(self) -> List[float]:
-        pass
+        return self.robot.get_current_joint_rt()
 
-    @abstractmethod
     def get_current_force_rt(self) -> List[float]:
-        pass
+        return self.robot.get_current_force_rt()
 
-    @abstractmethod
     def get_all_robot_state_at_once(self) -> None:
-        pass
+        return self.robot.get_all_robot_state_at_once()
 
-    @abstractmethod
     def get_enabled(self) -> bool:
-        pass
+        return self.robot.get_enabled()
 
-    @abstractmethod
     def get_is_in_servo_mode(self) -> bool:
-        pass
+        return self.robot.get_is_in_servo_mode()
 
-    @abstractmethod
     def get_is_emergency_stopped(self) -> bool:
-        pass
+        return self.robot.get_is_emergency_stopped()
 
-    @abstractmethod
     def get_errors(self) -> List[Dict[str, Any]]:
-        pass
+        return self.robot.get_errors()
 
     # END: 状態取得
-
-    # END: 実装必須
-
-    # BEGIN: オーバーライドの可能性あり
-
-    def on_step_start_in_control_loop(self) -> None:
-        # ロボット固有の処理を含む
-        pass
-
-    def should_wait_control_loop(self) -> bool:
-        # ロボット固有の処理を含む
-        return True
-
-    def is_ready_to_stop(self) -> bool:
-        # ロボット固有の処理を含む
-        # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
-        # ロボットを停止させてスレーブモードを解除可能な状態になる
-        # TODO: Cobottaには必要だがURに必要かは不明
-        return (self.control == self.last_control).all()
-
-    # END: オーバーライドの可能性あり
-
-    # BEGIN: オーバーライドの可能性なし
-
-    def __init__(self) -> None:
-        self._on_init()
 
     def init_realtime(self):
         os_used = sys.platform
@@ -751,7 +858,7 @@ class ControlBase(ABC):
             raise ValueError
         return target_diff, target_filtered_base
 
-    def control_loop(self, f: TextIO | None = None) -> bool:
+    def control_loop(self) -> bool:
         """リアルタイム制御ループ"""
         # ロボット固有の処理を含まない
         self.last = 0
@@ -1025,7 +1132,7 @@ class ControlBase(ABC):
                 self.logger.warning(sw.summary())
 
             # ロボットに制御値を送り制御する
-            if config.move_robot:
+            if config.move:
                 sw.lap("Send arm command")
                 if config.control_interface == "position":
                     success = self.move_joint_servo(
@@ -1073,7 +1180,6 @@ class ControlBase(ABC):
             # TODO: これで例外発生元のスタックトレースが取得できればこれで十分
             raise error_info['exception']
         return True
-
 
     def control_loop_w_recover_automatic(self) -> bool:
         """自動復帰を含むリアルタイム制御ループ"""
@@ -1167,12 +1273,12 @@ class ControlBase(ABC):
                     self.logger.info("User required put down box")
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
-                    _ = self._demo_put_down_box_impl()
+                    _ = self.demo_put_down_box()
                 elif line_cut != 0:
                     self.logger.info("User required line cut")
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
-                    _ = self._line_cut_impl()
+                    _ = self.line_cut()
                 # 単なる停止が要求された場合は、ループを抜ける
                 else:
                     break
@@ -1325,13 +1431,17 @@ class ControlBase(ABC):
         return is_success
 
     def tool_change(self, next_tool_id: int) -> bool:
+        """ツールを切り替える。"""
+        self.logger.info(f"Tool change to: {next_tool_id}")
         try:
             if next_tool_id == self.tool_id:
                 self.logger.info("Selected tool is current tool.")
                 self.pose[18] = 1
                 self.pose[17] = 0
                 return True
-            self._tool_change_impl(next_tool_id)
+            ret = self.robot._tool_change_impl(next_tool_id)
+            if not ret:
+                raise ValueError("Tool change implementation failed")
             # NOTE: より良い方法がないか
             # VRアニメーションがロボットの動きに追従し終わるのを待つ
             time.sleep(3)
@@ -1348,28 +1458,31 @@ class ControlBase(ABC):
             self.pose[17] = 0
             return False
 
-    def tool_change_not_in_rt(self, tool_id: int) -> bool:
-        self.logger.info("Tool change not in real-time")
-        ret = self.tool_change(tool_id)
-        return ret
-
     def demo_put_down_box(self) -> bool:
-        ret = self._demo_put_down_box_impl()
-        return ret
-
-    def demo_put_down_box_not_in_rt(self) -> bool:
-        self.logger.info("Demo put down box not in real-time")
-        ret = self._demo_put_down_box_impl()
-        return ret
+        """箱を動かすデモ。"""
+        self.logger.info("Demo put down box")
+        try:
+            ret = self.robot._demo_put_down_box_impl()
+            if not ret:
+                raise ValueError("Demo put down box implementation failed")
+            return True
+        except Exception as e:
+            self.logger.error("Error during demo put down box")
+            self.logger.error(f"{self.robot.format_error(e)}")
+            return False
 
     def line_cut(self) -> bool:
-        ret = self._line_cut_impl()
-        return ret
-
-    def line_cut_not_in_rt(self) -> bool:
-        self.logger.info("Line cut not in real-time")
-        ret = self._line_cut_impl()
-        return ret    
+        """箱を切るデモ。"""
+        self.logger.info("Line cut")
+        try:
+            ret = self.robot._line_cut_impl()
+            if not ret:
+                raise ValueError("Line cut implementation failed")
+            return True
+        except Exception as e:
+            self.logger.error("Error during line cut")
+            self.logger.error(f"{self.robot.format_error(e)}")
+            return False
 
     def setup_logger(self, log_queue):
         self.logger = logging.getLogger("CTRL")
@@ -1386,7 +1499,6 @@ class ControlBase(ABC):
             self.robot_handler = logging.StreamHandler()
         self.robot_logger.addHandler(self.robot_handler)
         self.robot_logger.setLevel(logging.INFO)
-
 
     def start_mqtt_control(self) -> bool:
         self.logger.info("Start MQTT control")
@@ -1434,13 +1546,13 @@ class ControlBase(ABC):
                     elif command == "release_hand":
                         status = self.release_hand()
                     elif command == "line_cut":
-                        status = self.line_cut_not_in_rt()
+                        status = self.line_cut()
                     elif command == "clear_error":
                         status = self.clear_error()
                     elif command == "start_mqtt_control":
                         status = self.start_mqtt_control()
                     elif command == "tool_change":
-                        status = self.tool_change_not_in_rt(**params)
+                        status = self.tool_change(**params)
                     elif command == "jog_joint":
                         status = self.jog_joint(**params)
                     elif command == "jog_tcp":
@@ -1448,7 +1560,7 @@ class ControlBase(ABC):
                     elif command == "move_joint":
                         status = self.move_joint(**params)
                     elif command == "demo_put_down_box":
-                        status = self.demo_put_down_box_not_in_rt()                
+                        status = self.demo_put_down_box()                
                     else:
                         message = "MQTT control not in progress. Consider starting MQTT control first."
                     if wait:
@@ -1505,5 +1617,3 @@ class ControlBase(ABC):
         time.sleep(1)
         self.handler.close()
         self.robot_handler.close()
-
-    # END: オーバーライドの可能性なし
