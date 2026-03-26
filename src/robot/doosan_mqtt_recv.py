@@ -4,10 +4,17 @@ from common.mqtt_recv_base import MQTT_Recv_Base
 
 
 class Doosan_MQTT_Recv(MQTT_Recv_Base):
-    def _on_init(self) -> None:
+    def on_init(self) -> None:
+        """追加の初期化処理。"""
         pass
 
     def _interpret_mqtt_ctrl_topic(self, js: dict[str, Any]) -> None:
+        """
+        MQTT制御トピックの内容を解釈して共有メモリに反映。
+        この実装内で、js中の関節角度(例: joints)が存在する場合、
+        必ずself._angle_unit_converter.to_internal(joints)
+        で角度を内部単位に変換したうえで共有メモリに反映すること。
+        """
         if "joints" in js:
             self.shm.joint_target = self._angle_unit_converter.to_internal(
                 js["joints"])

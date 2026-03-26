@@ -15,7 +15,8 @@ from robot.shared_memory import NamedSharedMemory
 class MQTT_Recv_Base(ABC):
     """MQTTを受信して共有メモリに書き込むプロセスの基底クラス."""
     @abstractmethod
-    def _on_init(self) -> None:
+    def on_init(self) -> None:
+        """追加の初期化処理。"""
         pass
 
     @abstractmethod
@@ -29,7 +30,7 @@ class MQTT_Recv_Base(ABC):
         pass
 
     def __init__(self):
-        self._on_init()
+        self.on_init()
         self.mqtt_ctrl_topic = None
         self.last_registered = None
         self.command_queue = None

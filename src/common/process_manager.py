@@ -5,7 +5,8 @@ from common.control_archiver import CON_Archiver
 from common.control_process import ControlProcess
 from common.ipc import TopicMemory
 from common.monitor_gui import run_joint_monitor_gui
-from robot import MON, MQTT_Recv
+from common.monitor_process import MonitorProcess
+from robot import MQTT_Recv
 from robot.config import robot_name, topic_types
 from robot.shared_memory import NamedSharedMemory
 
@@ -65,7 +66,7 @@ class ProcessManager:
         self.recvP.start()
 
     def startMonitor(self, logging_dir: str | None = None, disable_mqtt: bool = False):
-        self.mon = MON()
+        self.mon = MonitorProcess()
         self.monP = Process(
             target=self.mon.run_proc,
             args=(self.topic_memory,

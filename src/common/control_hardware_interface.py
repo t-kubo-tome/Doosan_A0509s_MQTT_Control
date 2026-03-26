@@ -110,42 +110,42 @@ class ControlHardwareInterface(ABC):
 
     # BEGIN: 状態取得
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_current_pose_rt(self) -> List[float]:
         """現在のTCPの姿勢を取得する。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_current_joint_rt(self) -> List[float]:
         """現在の関節角度を取得する。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_current_force_rt(self) -> List[float]:
         """現在のTCPの外力を取得する。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_all_robot_state_at_once(self) -> None:
         """ロボットの状態値が個別の関数ではなく少数の関数でまとめて取得できる場合に使用。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_enabled(self) -> bool:
         """ロボットのモーターの電源がONかどうかを取得する。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_is_in_servo_mode(self) -> bool:
         """ロボットがサーボモードかどうかを取得する。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_is_emergency_stopped(self) -> bool:
         """ロボットが非常停止状態かどうかを取得する。"""
         pass
 
-    @abstractmethod
+    @conditional_abstractmethod(config.real_monitor_process == "control")
     def get_errors(self) -> List[Dict[str, Any]]:
         """ロボットのエラーを取得する。"""
         pass

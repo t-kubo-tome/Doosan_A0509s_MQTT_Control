@@ -65,7 +65,8 @@ class ControlProcess:
             self.all_robot_state = {}
             # ロボットによっては別のモニタプロセスで状態値を取得できないので
             # 制御プロセス中の別のスレッドで取得する
-            self.init_monitor_loop()
+            if config.real_monitor_process == "control":
+                self.init_monitor_loop()
             # NOTE: 接続を何度も可能にする場合、ツールが複数ある場合は、
             # 最初のツールIDではだめな場合がある
             tool_id = int(os.environ["TOOL_ID"])
@@ -362,7 +363,6 @@ class ControlProcess:
             self.monitor_thread.join()
 
     def monitor_loop(self) -> None:
-        # TODO: monitor_loop_stepを実装してもいいかもしれない
         last = 0
         last_error_monitored = 0
         last_enabled = None
@@ -1603,7 +1603,9 @@ class ControlProcess:
                 # 監視間隔はリアルタイムでなくて良い
                 time.sleep(0.1)
         self.del_robot()
-        self.del_monitor_loop()
+        self.logger.info("Robot disconnected")
+        if config.real_monitor_process == "control":
+            self.del_monitor_loop()
         self.del_receive_command_loop()
         self.logger.info("Clean up threads")
         # 他のプロセスにも周知
