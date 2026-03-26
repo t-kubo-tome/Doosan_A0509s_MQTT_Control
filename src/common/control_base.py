@@ -390,23 +390,23 @@ class ControlBase(ABC):
             if tool_corrected != last_tool_corrected:
                 if tool_corrected == 1:
                     self.logger.info("Send grip command to hand")
-                    self.send_grip()
+                    is_success = self.send_grip(
+                        lock, error_info, error_event, stop_event)
+                    if not is_success:
+                        break
                 elif tool_corrected == 2:
                     self.logger.info("Send release command to hand")
-                    self.send_release()
+                    is_success = self.send_release(lock, error_info, error_event, stop_event)
+                    if not is_success:
+                        break
             # ハンドの状態値を取得
             # 情報を常に取得するとアームの制御ループの処理間隔を乱し
             # 情報が必要なのはハンドに制御値を送った少し後だけなので以下のようにする
             # NOTE: 常に取得した方がいいかもしれない。処理間隔を乱すなら別プロセス化の方がいいかもしれない
             if now - last_tool_corrected_time < 1:
-                try:
-                    self.get_hand_state()
-                except Exception as e:
-                    with lock:
-                        error_info['kind'] = "hand"
-                        error_info['msg'] = self.format_error(e)
-                        error_info['exception'] = e
-                    error_event.set()
+                is_success = self.get_hand_state(
+                    lock, error_info, error_event, stop_event)
+                if not is_success:
                     break
             if tool_corrected != last_tool_corrected:
                 last_tool_corrected = tool_corrected

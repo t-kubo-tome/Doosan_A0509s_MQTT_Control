@@ -103,26 +103,44 @@ class Doosan_CON(ControlBase):
     ) -> bool:
         # ロボット固有の処理を含む
         # ハンドの状態値を取得して共有メモリに格納する
-        width = None
-        force = None
         if self.hand is not None:
             width, width_success, width_msg = self.hand.get_width()
-            if not width_success:
-                self.logger.error(f"Failed to get hand width: {width_msg}")
-            force, force_success, force_msg = self.hand.get_force()
-            if not force_success:
-                self.logger.error(f"Failed to get hand force: {force_msg}")
+        else:
+            width, width_success, width_msg = None, False, "Hand is not connected"
         if width is None:
             width = 0
         else:
             # 0に意味があるのでオフセットをもたせる
             width += 100
+        self.shm.hand_state = width
+        if not width_success:
+            self.logger.error(f"Failed to get hand state width: {width_msg}")
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = width_msg
+                error_info['exception'] = ValueError(width_msg)
+            error_event.set()
+            stop_event.set()
+
+        if self.hand is not None:
+            force, force_success, force_msg = self.hand.get_force()
+        else:
+            force, force_success, force_msg = None, False, "Hand is not connected"
         if force is None:
             force = 0
         else:
+            # 0に意味があるのでオフセットをもたせる
             force += 100
-        self.shm.hand_state = width
         self.shm.hand_force = force
+        if not force_success:
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = force_msg
+                error_info['exception'] = ValueError(force_msg)
+            error_event.set()
+            stop_event.set()
+
+        return width_success and force_success
 
     def find_and_setup_hand(self, tool_id):
         tool_info = self.get_tool_info(tool_infos, tool_id)
