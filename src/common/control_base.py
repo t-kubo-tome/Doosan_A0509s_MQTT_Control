@@ -15,6 +15,7 @@ from common.interpolate import DelayedInterpolator
 from common.utils import StopWatch
 from robot import config
 from robot.shared_memory import NamedSharedMemory
+from robot.tools import tool_classes, tool_infos
 
 
 class ControlBase(ABC):
@@ -209,12 +210,6 @@ class ControlBase(ABC):
     # END: 状態取得
 
     # BEGIN: ハンド関連
-
-    @abstractmethod
-    def find_and_setup_hand(self, tool_id) -> None:
-        """ハンドを見つけてセットアップする。"""
-        # NOTE: 例外の送出をどうするか
-        pass
 
     @abstractmethod
     def get_hand_state(
@@ -1236,6 +1231,26 @@ class ControlBase(ABC):
     ) -> Dict[str, Any]:
         return [tool_info for tool_info in tool_infos
                 if tool_info["id"] == tool_id][0]
+
+    def find_and_setup_hand(self, tool_id) -> None:
+        # NOTE: 変更する可能性あり
+        tool_info = self.get_tool_info(tool_infos, tool_id)
+        name = tool_info["name"]
+        args = tool_info.get("args", {})
+        hand = tool_classes[name](**args)
+        if tool_id != -1:
+            try:
+                hand.connect_and_setup()
+            except Exception as e:
+                self.logger.error(f"Error connecting to hand: {name}")
+                self.logger.error(f"{self.format_error(e)}")
+                hand = None
+        else:
+            hand = None
+        self.hand_name = name
+        self.hand = hand
+        self.tool_id = tool_id
+        self.shm.tool_id = tool_id
 
     def tool_change(self, next_tool_id: int) -> bool:
         try:

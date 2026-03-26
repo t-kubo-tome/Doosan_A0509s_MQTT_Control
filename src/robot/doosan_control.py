@@ -8,7 +8,6 @@ import numpy as np
 from common.control_base import ControlBase
 from robot import config
 from robot.doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
-from robot.tools import tool_classes, tool_infos
 
 
 class Doosan_CON(ControlBase):
@@ -323,26 +322,6 @@ class Doosan_CON(ControlBase):
     # END: 状態取得
 
     # BEGIN: ハンド関連
-
-    def find_and_setup_hand(self, tool_id) -> None:
-        # NOTE: 変更する可能性あり
-        tool_info = self.get_tool_info(tool_infos, tool_id)
-        name = tool_info["name"]
-        args = tool_info.get("args", {})
-        hand = tool_classes[name](**args)
-        if tool_id != -1:
-            try:
-                hand.connect_and_setup()
-            except Exception as e:
-                self.logger.error(f"Error connecting to hand: {name}")
-                self.logger.error(f"{self.format_error(e)}")
-                hand = None
-        else:
-            hand = None
-        self.hand_name = name
-        self.hand = hand
-        self.tool_id = tool_id
-        self.shm.tool_id = tool_id
 
     def get_hand_state(
         self,
