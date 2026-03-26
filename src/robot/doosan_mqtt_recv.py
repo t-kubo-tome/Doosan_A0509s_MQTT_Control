@@ -12,7 +12,7 @@ from robot.config import (
     joint_unit_internal,
     joint_unit_external,
 )
-from robot.doosan_shared_memory import DoosanNamedSharedMemory
+from robot.shared_memory import NamedSharedMemory
 
 
 @dataclass
@@ -33,8 +33,8 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
             joint_unit_external=joint_unit_external,
         )
 
-    def _get_make_shared_memory(self) -> type[DoosanNamedSharedMemory]:
-        return DoosanNamedSharedMemory
+    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
+        return NamedSharedMemory
 
     def _init_other_than_config(self) -> None:
         pass

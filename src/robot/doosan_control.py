@@ -28,7 +28,7 @@ from robot.config import (
     use_normalize_target_to_nearest,
     use_second_speed_limit,
 )
-from robot.doosan_shared_memory import DoosanNamedSharedMemory
+from robot.shared_memory import NamedSharedMemory
 from robot.doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
 from robot.tools import tool_classes, tool_infos
 
@@ -43,8 +43,8 @@ class DoosanControlConfig(ControlConfig):
 
 
 class Doosan_CON(ControlBase):
-    def _get_make_shared_memory(self) -> type[DoosanNamedSharedMemory]:
-        return DoosanNamedSharedMemory
+    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
+        return NamedSharedMemory
 
     def _get_config(self) -> DoosanControlConfig:
         return DoosanControlConfig(

@@ -3,7 +3,7 @@ import numpy as np
 from common.shared_memory_base import NamedSharedMemoryBase
 
 
-class DoosanNamedSharedMemory(NamedSharedMemoryBase):
+class NamedSharedMemory(NamedSharedMemoryBase):
     name = "doosan"
     size = 64
 

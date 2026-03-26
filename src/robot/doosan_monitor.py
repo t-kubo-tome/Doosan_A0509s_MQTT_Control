@@ -13,7 +13,7 @@ from robot.config import (
     joint_unit_internal,
     joint_unit_external,
 )
-from robot.doosan_shared_memory import DoosanNamedSharedMemory
+from robot.shared_memory import NamedSharedMemory
 
 
 @dataclass
@@ -34,8 +34,8 @@ class Doosan_MON(MonitorBase):
             hand_ip=HAND_IP,
         )
 
-    def _get_make_shared_memory(self) -> type[DoosanNamedSharedMemory]:
-        return DoosanNamedSharedMemory
+    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
+        return NamedSharedMemory
 
     def _init_other_than_config(self) -> None:
         pass
