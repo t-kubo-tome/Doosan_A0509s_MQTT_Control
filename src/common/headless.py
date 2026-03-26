@@ -9,10 +9,8 @@ import os
 import queue
 import signal
 import time
-from pathlib import Path
 from typing import Optional
 
-from dotenv import load_dotenv
 from paho.mqtt import client as mqtt
 
 from common.log import MicrosecondFormatter
@@ -22,44 +20,6 @@ from robot import config
 
 class HeadlessLoop:
     """Headlessモード (GUIなし) でのMQTTコマンド制御ループ"""
-
-    # NOTE: この説明をGUIと共有できないか
-    COMMANDS = {
-        "enable": {"params": [], "description": "アームを移動させるための電源をONにする"},
-        "disable": {"params": [], "description": "アームを移動させるための電源をOFFにする"},
-        "tidy_pose": {"params": [], "description": "ロボットを待機姿勢に移動する"},
-        "release_hand": {"params": [], "description": "ハンドを最大まで開く"},
-        "start_mqtt_control": {"params": [], "description": "MQTTでのリアルタイム制御を開始する"},
-        "stop_mqtt_control": {"params": [], "description": "MQTTでのリアルタイム制御を停止する"},
-        "change_log_file": {"params": [], "description": "ログ出力ディレクトリを現在時刻のディレクトリに切り替える"},
-        "shutdown": {"params": [], "description": "ロボット制御プログラムを終了する"},
-        "jog_joint": {
-            "params": ["joint", "direction"],
-            "description": "関節角度制御によるジョグ。jointは関節の順番(0-5)、directionは角度の移動量(deg)"
-        },
-        "jog_tcp": {
-            "params": ["axis", "direction"],
-            "description": "TCP座標系でのジョグ。axisは軸(0:X,1:Y,2:Z,3:RX,4:RY,5:RZ)、directionは移動量(mm)"
-        },
-        "get_command_list": {
-            "params": [],
-            "description": "サポートされているコマンド一覧を取得する"
-        },
-        "get_joint_names": {
-            "params": [],
-            "description": "ジョイントの数と名前を取得する"
-        },
-        # 起動時に自動的に実行するため公開しない
-        "connect_robot": {"params": [], "description": "ロボット接続"},
-        "connect_mqtt": {"params": [], "description": "MQTT接続"},
-        # 本ロボットでは使用しないので公開しない
-        "clear_error": {"params": [], "description": "エラークリア"},
-        "demo_put_down_box": {"params": [], "description": "デモ実行"},
-        "line_cut": {"params": [], "description": "カッター移動"},
-        "tool_change": {"params": ["tool_id"], "description": "ツール交換"},
-        "set_area_enabled": {"params": ["enabled"], "description": "エリア設定"},
-    }
-
     def __init__(self, **kwargs):
         self.running = True
         self.pm: Optional[ProcessManager] = None
@@ -67,23 +27,18 @@ class HeadlessLoop:
         self.listener: Optional[logging.handlers.QueueListener] = None
         self.logging_dir: Optional[str] = None
         self.response_client: Optional[mqtt.Client] = None
-        self.robot_uuid: Optional[str] = None
-        self.mqtt_server: Optional[str] = None
         self.supported_commands = (
             config.supported_commands_common + config.supported_commands_api_only
         )
 
     def _setup_response_mqtt(self) -> None:
         """MQTTレスポンス用クライアントを初期化"""
-        load_dotenv(Path(__file__).parent / ".env")
-        self.robot_uuid = os.getenv("ROBOT_UUID", "ur-real")
-        self.mqtt_server = os.getenv("MQTT_SERVER", "localhost")
-        self.response_topic = f"dev/{self.robot_uuid}/response"
+        self.response_topic = f"dev/{config.robot_uuid}/response"
         self.response_client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self.response_client.on_connect = self.on_connect
         self.response_client.on_disconnect = self.on_disconnect
-        self.response_client.connect(self.mqtt_server, 1883, 60)
+        self.response_client.connect(config.mqtt_server, 1883, 60)
         self.response_client.loop_start()
 
     def on_connect(self, client, userdata, connect_flags, reason_code, properties) -> None:
@@ -394,7 +349,7 @@ class HeadlessLoop:
             self.logger.warning("Response MQTT client not initialized")
             return
         response = {
-            "devId": self.robot_uuid,
+            "devId": config.robot_uuid,
             "command": command,
             "status": status,
             "message": message,

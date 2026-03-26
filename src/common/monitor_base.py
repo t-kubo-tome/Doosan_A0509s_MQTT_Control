@@ -7,7 +7,6 @@ import queue
 import sys
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Dict, List, TextIO
 

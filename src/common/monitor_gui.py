@@ -18,15 +18,14 @@ class JointMonitorPlot(QtWidgets.QWidget):
     ):
         """関節角度の時系列データのプロット。"""
         super().__init__()
-        self.n_joints = len(config.abs_joint_limit)
         self.max_points = max_points
-        self.t_intv = config.t_intv
+        config.t_intv = config.t_intv
         self.t_start = time.time()
         self.xdata = deque(maxlen=max_points)
         self.ydata = {
-            'state': [deque(maxlen=max_points) for _ in range(self.n_joints)],
-            'target': [deque(maxlen=max_points) for _ in range(self.n_joints)],
-            'control': [deque(maxlen=max_points) for _ in range(self.n_joints)],
+            'state': [deque(maxlen=max_points) for _ in range(config.n_joints)],
+            'target': [deque(maxlen=max_points) for _ in range(config.n_joints)],
+            'control': [deque(maxlen=max_points) for _ in range(config.n_joints)],
         }
         self.shm = NamedSharedMemory(create=False)
         self.data_lock = threading.Lock()
@@ -37,7 +36,7 @@ class JointMonitorPlot(QtWidgets.QWidget):
         self.plots = []
         self.curves = []
         layout = QtWidgets.QVBoxLayout()
-        for i in range(self.n_joints):
+        for i in range(config.n_joints):
             plot = pg.PlotWidget(title=f"Joint {i+1}")
             if i == 0:
                 plot.addLegend()
@@ -61,7 +60,7 @@ class JointMonitorPlot(QtWidgets.QWidget):
         # 必ずしもt_intvの周期で呼ばれるわけではない
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start(int(self.t_intv * 1000))
+        self.timer.start(int(config.t_intv * 1000))
 
     def data_acquisition_loop(self):
         # 共有メモリから最近数件のデータを取得、高速なのでロックしてもOK
@@ -72,14 +71,14 @@ class JointMonitorPlot(QtWidgets.QWidget):
             joint_control = self.shm.joint_control.copy()
             with self.data_lock:
                 self.xdata.append(t)
-                for i in range(self.n_joints):
+                for i in range(config.n_joints):
                     self.ydata['state'][i].append(float(joint_state[i]))
                     self.ydata['target'][i].append(float(joint_target[i]))
                     self.ydata['control'][i].append(float(joint_control[i]))
             # ループ時間が一定になるようにする
             t_after = time.time() - self.t_start
             t_elapsed = t_after - t
-            t_wait = self.t_intv - t_elapsed
+            t_wait = config.t_intv - t_elapsed
             if t_wait > 0:
                 time.sleep(t_wait)
 
@@ -88,7 +87,7 @@ class JointMonitorPlot(QtWidgets.QWidget):
         with self.data_lock:
             x = np.array(self.xdata)
             y = {}
-            for i in range(self.n_joints):
+            for i in range(config.n_joints):
                 for k in self.ydata:
                     y_ = np.array(self.ydata[k][i])
                     if k not in y:
@@ -96,7 +95,7 @@ class JointMonitorPlot(QtWidgets.QWidget):
                     else:
                         y[k].append(y_)
         # 描画、低速 (30 ms周期くらい)なのでロックしないほうがいい
-        for i in range(self.n_joints):
+        for i in range(config.n_joints):
             for k in self.ydata:
                 self.curves[i][k].setData(x, y[k][i])
         if self.shm.exit_program == 1:

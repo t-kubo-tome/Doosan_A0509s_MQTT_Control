@@ -4,7 +4,6 @@ import logging
 import logging.handlers
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime
 
 from paho.mqtt import client as mqtt

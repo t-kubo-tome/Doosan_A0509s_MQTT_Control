@@ -10,9 +10,6 @@ from robot import config
 from robot.doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
 from robot.tools import tool_classes, tool_infos
 
-# n_windows *= int(0.008 / t_intv)
-reset_default_state = True
-
 
 class Doosan_CON(ControlBase):
     def _on_init(self) -> None:

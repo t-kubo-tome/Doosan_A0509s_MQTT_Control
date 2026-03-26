@@ -13,6 +13,7 @@ class ProcessManager:
     """複数プロセスを管理するクラス."""
     def __init__(self, use_command_queue: bool = False):
         # mp.set_start_method('spawn')
+        # 共有メモリ
         self.shm = NamedSharedMemory(create=True)
         self.manager = multiprocessing.Manager()
         self.topic_memory = TopicMemory(self.manager, topic_types=topic_types)
@@ -21,15 +22,16 @@ class ProcessManager:
         self.main_to_monitor_pipe, self.monitor_pipe = multiprocessing.Pipe()
         self.log_queue = multiprocessing.Queue()
         self.command_queue = multiprocessing.Queue() if use_command_queue else None
+        self.control_to_archiver_queue = multiprocessing.Queue()
+        self.main_to_control_archiver_pipe, self.control_archiver_pipe = \
+            multiprocessing.Pipe()
+        self.monitor_queue = multiprocessing.Queue()
+        # プロセス
         self.recvP = None
         self.monP = None
         self.ctrlP = None
         self.monitor_guiP = None
         self.ctrl_archiverP = None
-        self.control_to_archiver_queue = multiprocessing.Queue()
-        self.main_to_control_archiver_pipe, self.control_archiver_pipe = \
-            multiprocessing.Pipe()
-        self.monitor_queue = multiprocessing.Queue()
 
     @property
     def state_recv_mqtt(self) -> bool:
