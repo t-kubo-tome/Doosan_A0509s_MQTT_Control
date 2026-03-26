@@ -80,11 +80,6 @@ class ControlBase(ABC):
         pass
 
     @abstractmethod
-    def release_hand(self) -> bool:
-        """ハンドをリリースする。例外の送出は禁止。"""
-        pass
-
-    @abstractmethod
     def jog_joint(self, joint: int, direction: float) -> bool:
         """関節をジョグする。例外の送出は禁止。"""
         pass
@@ -208,31 +203,6 @@ class ControlBase(ABC):
         pass
 
     # END: 状態取得
-
-    # BEGIN: ハンド関連
-
-    @abstractmethod
-    def get_hand_state(
-        self,
-        lock,
-        error_info,
-        error_event,
-        stop_event,
-    ) -> bool:
-        """ハンドの状態を取得する。例外の送出は禁止。"""
-        pass
-
-    @abstractmethod
-    def send_grip(self) -> bool:
-        """グリップを送信する。例外の送出は禁止。"""
-        pass
-
-    @abstractmethod
-    def send_release(self) -> bool:
-        """リリースを送信する。例外の送出は禁止。"""
-        pass
-
-    # END: ハンド関連
 
     # END: 実装必須
 
@@ -1251,6 +1221,108 @@ class ControlBase(ABC):
         self.hand = hand
         self.tool_id = tool_id
         self.shm.tool_id = tool_id
+
+    def release_hand(self) -> bool:
+        self.logger.info("Release hand")
+        if self.hand is not None:
+            is_success, msg = self.hand.release()
+        else:
+            is_success = False
+            msg = "Hand is not connected"
+        if not is_success:
+            self.logger.error(f"Error releasing hand: {msg}")
+        return is_success
+
+    def get_hand_state(
+        self,
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        # ハンドの状態値を取得して共有メモリに格納する
+        if self.hand is not None:
+            width, width_success, width_msg = self.hand.get_width()
+        else:
+            width, width_success, width_msg = None, False, "Hand is not connected"
+        if width is None:
+            width = 0
+        else:
+            # 0に意味があるのでオフセットをもたせる
+            width += 100
+        self.shm.hand_state = width
+        if not width_success:
+            self.logger.error(f"Failed to get hand state width: {width_msg}")
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = width_msg
+                error_info['exception'] = ValueError(width_msg)
+            error_event.set()
+            stop_event.set()
+
+        if self.hand is not None:
+            force, force_success, force_msg = self.hand.get_force()
+        else:
+            force, force_success, force_msg = None, False, "Hand is not connected"
+        if force is None:
+            force = 0
+        else:
+            # 0に意味があるのでオフセットをもたせる
+            force += 100
+        self.shm.hand_force = force
+        if not force_success:
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = force_msg
+                error_info['exception'] = ValueError(force_msg)
+            error_event.set()
+            stop_event.set()
+
+        return width_success and force_success
+
+    def send_grip(
+        self,
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        if self.hand is not None:
+            is_success, msg = self.hand.grip()
+        else:
+            is_success = False
+            msg = "Hand is not connected"
+        if not is_success:
+            self.logger.error(f"Failed to grip: {msg}")
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = msg
+                error_info['exception'] = ValueError(msg)
+            error_event.set()
+            stop_event.set()
+        return is_success
+
+    def send_release(
+        self,
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        if self.hand is not None:
+            is_success, msg = self.hand.release()
+        else:
+            is_success = False
+            msg = "Hand is not connected"
+        if not is_success:
+            self.logger.error(f"Failed to release: {msg}")
+            with lock:
+                error_info['kind'] = "hand"
+                error_info['msg'] = msg
+                error_info['exception'] = ValueError(msg)
+            error_event.set()
+            stop_event.set()
+        return is_success
 
     def tool_change(self, next_tool_id: int) -> bool:
         try:
