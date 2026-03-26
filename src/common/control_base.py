@@ -19,13 +19,153 @@ from robot.shared_memory import NamedSharedMemory
 
 class ControlBase(ABC):
     """ロボットの制御ループの基底クラス."""
+
+    # START: 実装必須
+
+    # BEGIN: 汎用
+
     @abstractmethod
     def _on_init(self) -> None:
+        """ロボット固有の初期化処理を行う。__init__内で呼び出される。"""
         pass
 
     @abstractmethod
-    def connect_robot(self) -> bool:
+    def format_error(self, e: Exception) -> str:
+        """例外をフォーマットする。"""
         pass
+
+    @abstractmethod
+    def del_robot(self) -> None:
+        """ロボットのインスタンスを削除する。"""
+        pass
+
+    # END: 汎用
+
+    # BEGIN: 受信コマンド
+
+    @abstractmethod
+    def connect_robot(self) -> bool:
+        """ロボットに接続する。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def enable(self) -> bool:
+        """ロボットのモーターの電源をONにする。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def disable(self) -> bool:
+        """ロボットのモーターの電源をOFFにする。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def set_area_enabled(self, enable: bool) -> bool:
+        """ロボットのエリア制限をON/OFFする。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def tidy_pose(self) -> bool:
+        """ロボットをデフォルトの姿勢に移動させる。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def move_joint(self, joints: List[float]) -> bool:
+        """ロボットを関節空間で移動させる。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def clear_error(self) -> bool:
+        """ロボットのエラーをクリアする。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def _tool_change_impl(self, next_tool_id: int) -> None:
+        # NOTE: 例外の送出をどうするか
+        pass
+
+    @abstractmethod
+    def demo_put_down_box(self) -> bool:
+        """箱を動かすデモ。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def line_cut(self) -> bool:
+        """箱を切るデモ。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def release_hand(self) -> bool:
+        """ハンドをリリースする。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def jog_joint(self, joint: int, direction: float) -> bool:
+        """関節をジョグする。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def jog_tcp(self, axis: int, direction: float) -> bool:
+        """TCPをジョグする。例外の送出は禁止。"""
+        pass
+
+    # END: 受信コマンド
+
+    # BEGIN: MQTT制御
+
+    @abstractmethod
+    def enter_servo_mode(self) -> bool:
+        """ロボットをサーボモードに切り替える。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def leave_servo_mode(self) -> bool:
+        """ロボットをサーボモードから離れる。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
+        pass
+
+    @abstractmethod
+    def recover_automatic_on_timeout_error(self) -> bool:
+        pass
+
+    @abstractmethod
+    def recover_automatic_on_recoverable_error(self) -> bool:
+        pass
+
+    # END: MQTT制御
+
+    # BEGIN: リアルタイム制御
+
+    @abstractmethod
+    def move_joint_servo(
+        self,
+        control: List[float],
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        """関節のスレーブモードでの制御値をロボットに送る。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def move_joint_servo_by_vel(
+        self,
+        control: List[float],
+        lock,
+        error_info,
+        error_event,
+        stop_event,
+    ) -> bool:
+        """関節のスレーブモードでの速度制御値をロボットに送る。例外の送出は禁止。"""
+        pass
+
+    # END: リアルタイム制御
+
+    # BEGIN: 状態取得
+    # NOTE: 例外の送出を禁止するかどうか。
 
     @abstractmethod
     def get_current_pose_rt(self) -> List[float]:
@@ -59,111 +199,38 @@ class ControlBase(ABC):
     def get_errors(self) -> List[Dict[str, Any]]:
         pass
 
+    # END: 状態取得
+
+    # BEGIN: ハンド関連
+
     @abstractmethod
-    def format_error(self, e: Exception) -> str:
+    def find_and_setup_hand(self, tool_id) -> None:
+        """ハンドを見つけてセットアップする。"""
+        # NOTE: 例外の送出をどうするか
         pass
 
     @abstractmethod
-    def move_joint_servo(
+    def get_hand_state(
         self,
-        control: List[float],
         lock,
         error_info,
         error_event,
         stop_event,
     ) -> bool:
+        """ハンドの状態を取得する。例外の送出は禁止。"""
         pass
 
     @abstractmethod
-    def move_joint_servo_by_vel(
-        self,
-        control: List[float],
-        lock,
-        error_info,
-        error_event,
-        stop_event,
-    ) -> bool:
+    def send_grip(self) -> bool:
+        """グリップを送信する。例外の送出は禁止。"""
         pass
 
     @abstractmethod
-    def send_grip(self) -> None:
+    def send_release(self) -> bool:
+        """リリースを送信する。例外の送出は禁止。"""
         pass
 
-    @abstractmethod
-    def send_release(self) -> None:
-        pass
-
-    @abstractmethod
-    def release_hand(self) -> bool:
-        pass
-
-    @abstractmethod
-    def enable(self) -> bool:
-        pass
-
-    @abstractmethod
-    def disable(self) -> bool:
-        pass
-
-    @abstractmethod
-    def set_area_enabled(self, enable: bool) -> bool:
-        pass
-
-    @abstractmethod
-    def tidy_pose(self) -> bool:
-        pass
-
-    @abstractmethod
-    def move_joint(self, joints: List[float]) -> bool:
-        pass
-
-    @abstractmethod
-    def clear_error(self) -> bool:
-        pass
-
-    @abstractmethod
-    def enter_servo_mode(self) -> bool:
-        pass
-
-    @abstractmethod
-    def leave_servo_mode(self) -> bool:
-        pass
-
-    @abstractmethod
-    def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
-        pass
-
-    @abstractmethod
-    def recover_automatic_on_timeout_error(self) -> bool:
-        pass
-
-    @abstractmethod
-    def recover_automatic_on_recoverable_error(self) -> bool:
-        pass
-
-    @abstractmethod
-    def _tool_change_impl(self, next_tool_id: int) -> None:
-        pass
-
-    @abstractmethod
-    def jog_joint(self, joint: int, direction: float) -> bool:
-        pass
-
-    @abstractmethod
-    def jog_tcp(self, axis: int, direction: float) -> bool:
-        pass
-
-    @abstractmethod
-    def demo_put_down_box(self) -> bool:
-        pass
-
-    @abstractmethod
-    def line_cut(self) -> bool:
-        pass
-
-    @abstractmethod
-    def del_robot(self) -> None:
-        pass
+    # END: ハンド関連
 
     # STOP: 実装必須
 
