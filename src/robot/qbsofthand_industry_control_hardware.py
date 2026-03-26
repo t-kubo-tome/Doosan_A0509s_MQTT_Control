@@ -1,8 +1,8 @@
-from common.hand_control_base import HandControlBase
+from common.hand_control_hardware_interface import HandControlHardwareInterface
 from robot.qbsofthand_industry_api_pybind import qbSoftHandIndustryAPI
 
 
-class QbSoftHandIndustryControl(HandControlBase):
+class QbSoftHandIndustryControlHardware(HandControlHardwareInterface):
     """qbSoftHandIndustryのハンド制御クラス."""
     def __init__(self, hand_ip: str, max_timeout: int = 10) -> None:
         self._hand_ip = hand_ip

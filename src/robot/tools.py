@@ -1,6 +1,6 @@
 """ツール一覧。"""
 from robot import config
-from robot.qbsofthand_industry_control import QbSoftHandIndustryControl
+from robot.qbsofthand_industry_control_hardware import QbSoftHandIndustryControlHardware
 
 # 以降に使用するツール情報を追加すること
 
@@ -19,7 +19,7 @@ tool_infos = [
 ]
     
 tool_classes = {
-    "qb_soft_hand_industry": QbSoftHandIndustryControl,
+    "qb_soft_hand_industry": QbSoftHandIndustryControlHardware,
 }
 
 # 以降は触らないこと

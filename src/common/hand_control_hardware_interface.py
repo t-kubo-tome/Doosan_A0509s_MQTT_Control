@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class HandControlBase(ABC):
+class HandControlHardwareInterface(ABC):
     """
     ハンド制御の抽象クラス.
     リアルタイム制御で使用しない関数は、デバッグしやすいため例外を送出する.
@@ -54,7 +54,7 @@ class HandControlBase(ABC):
         pass
 
 
-class DummyHandControl(HandControlBase):
+class DummyHandControl(HandControlHardwareInterface):
     """ダミーのハンド制御クラス.通信接続が不要なツールを使用する場合に使用."""
     def __init__(self, **kwargs) -> None:
         self._conn = False
