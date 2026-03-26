@@ -1027,6 +1027,7 @@ class MQTTWin:
 
     def on_closing(self):
         """ウインドウを閉じるときの処理"""
+        self.logger.info("Closing the application...")
         self.pm.stop_all_processes()
         self.logger.info("All processes stopped")
         self.listener.stop()
