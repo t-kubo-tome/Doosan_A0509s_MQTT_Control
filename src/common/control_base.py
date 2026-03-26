@@ -79,21 +79,6 @@ class ControlBase(ABC):
         pass
 
     @abstractmethod
-    def _tool_change_impl(self, next_tool_id: int) -> None:
-        # NOTE: 例外の送出をどうするか
-        pass
-
-    @abstractmethod
-    def demo_put_down_box(self) -> bool:
-        """箱を動かすデモ。例外の送出は禁止。"""
-        pass
-
-    @abstractmethod
-    def line_cut(self) -> bool:
-        """箱を切るデモ。例外の送出は禁止。"""
-        pass
-
-    @abstractmethod
     def release_hand(self) -> bool:
         """ハンドをリリースする。例外の送出は禁止。"""
         pass
@@ -110,28 +95,50 @@ class ControlBase(ABC):
 
     # END: 受信コマンド
 
-    # BEGIN: MQTT制御
+    # BEGIN: 規定動作
 
     @abstractmethod
-    def enter_servo_mode(self) -> bool:
-        """ロボットをサーボモードに切り替える。例外の送出は禁止。"""
+    def _tool_change_impl(self, next_tool_id: int) -> None:
+        """ツールを切り替える。"""
         pass
 
     @abstractmethod
-    def leave_servo_mode(self) -> bool:
-        """ロボットをサーボモードから離れる。例外の送出は禁止。"""
+    def _demo_put_down_box_impl(self) -> bool:
+        """箱を動かすデモ。例外の送出は禁止。"""
+        pass
+
+    @abstractmethod
+    def _line_cut_impl(self) -> bool:
+        """箱を切るデモ。例外の送出は禁止。"""
+        pass
+
+    # END: 規定動作
+
+    # BEGIN: MQTT制御
+
+    @abstractmethod
+    def enter_servo_mode(self) -> None:
+        """ロボットをサーボモードに切り替える。"""
+        pass
+
+    @abstractmethod
+    def leave_servo_mode(self) -> None:
+        """ロボットをサーボモードから離れる。"""
         pass
 
     @abstractmethod
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
+        """タイムアウトエラーが発生したときに自動的に回復するかどうか。例外の送出は禁止。"""
         pass
 
     @abstractmethod
     def recover_automatic_on_timeout_error(self) -> bool:
+        """タイムアウトエラーが発生したときに自動的に回復する処理を行う。例外の送出は禁止。"""
         pass
 
     @abstractmethod
     def recover_automatic_on_recoverable_error(self) -> bool:
+        """回復可能なエラーが発生したときに自動的に回復する処理を行う。例外の送出は禁止。"""
         pass
 
     # END: MQTT制御
@@ -1195,12 +1202,12 @@ class ControlBase(ABC):
                     self.logger.info("User required put down box")
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
-                    _ = self.demo_put_down_box()
+                    _ = self._demo_put_down_box_impl()
                 elif line_cut != 0:
                     self.logger.info("User required line cut")
                     # 成功しても失敗してもループを継続する (ツールを変えることによる
                     # 予測できないエラーは起こらないため)
-                    _ = self.line_cut()
+                    _ = self._line_cut_impl()
                 # 単なる停止が要求された場合は、ループを抜ける
                 else:
                     break
@@ -1256,13 +1263,26 @@ class ControlBase(ABC):
 
     def tool_change_not_in_rt(self, tool_id: int) -> bool:
         self.logger.info("Tool change not in real-time")
-        while True:
-            next_tool_id = self.pose[17]
-            if next_tool_id != 0:
-                self.pose[41] = 0
-                ret = self.tool_change(next_tool_id)
-                self.pose[41] = 1
-                return ret
+        ret = self.tool_change(tool_id)
+        return ret
+
+    def demo_put_down_box(self) -> bool:
+        ret = self._demo_put_down_box_impl()
+        return ret
+
+    def demo_put_down_box_not_in_rt(self) -> bool:
+        self.logger.info("Demo put down box not in real-time")
+        ret = self._demo_put_down_box_impl()
+        return ret
+
+    def line_cut(self) -> bool:
+        ret = self._line_cut_impl()
+        return ret
+
+    def line_cut_not_in_rt(self) -> bool:
+        self.logger.info("Line cut not in real-time")
+        ret = self._line_cut_impl()
+        return ret    
 
     def setup_logger(self, log_queue):
         self.logger = logging.getLogger("CTRL")
@@ -1327,7 +1347,7 @@ class ControlBase(ABC):
                     elif command == "release_hand":
                         status = self.release_hand()
                     elif command == "line_cut":
-                        status = self.line_cut()
+                        status = self.line_cut_not_in_rt()
                     elif command == "clear_error":
                         status = self.clear_error()
                     elif command == "start_mqtt_control":
@@ -1341,7 +1361,7 @@ class ControlBase(ABC):
                     elif command == "move_joint":
                         status = self.move_joint(**params)
                     elif command == "demo_put_down_box":
-                        status = self.demo_put_down_box()                
+                        status = self.demo_put_down_box_not_in_rt()                
                     else:
                         message = "MQTT control not in progress. Consider starting MQTT control first."
                     if wait:

@@ -121,18 +121,6 @@ class Doosan_CON(ControlBase):
     def clear_error(self) -> bool:
         raise NotImplementedError
 
-    def _tool_change_impl(self, next_tool_id: int) -> None:
-        self.logger.info("_tool_change_impl")
-        raise NotImplementedError
-
-    def demo_put_down_box(self) -> bool:
-        self.logger.info("Demo put down box")
-        raise NotImplementedError
-
-    def line_cut(self) -> bool:
-        self.logger.info("Line cut")
-        raise NotImplementedError
-
     def release_hand(self) -> bool:
         self.logger.info("Release hand")
         if self.hand is not None:
@@ -182,26 +170,35 @@ class Doosan_CON(ControlBase):
 
     # END: 受信コマンド
 
+    # BEGIN: 規定動作
+    
+    def _tool_change_impl(self, next_tool_id: int) -> None:
+        raise NotImplementedError
+
+    def _demo_put_down_box_impl(self) -> bool:
+        raise NotImplementedError
+
+    def _line_cut_impl(self) -> bool:
+        raise NotImplementedError
+
+    # END: 規定動作
+
     # BEGIN: MQTT制御
 
-    def enter_servo_mode(self) -> bool:
-        # TODO: boolかtryか
+    def enter_servo_mode(self) -> None:
         # self.shm.maybe_slave_modeは0のとき必ず通常モード。
         # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
         with self.slave_mode_lock:
             self.shm.maybe_slave_mode = 1
-        return True
 
-    def leave_servo_mode(self) -> bool:
-        # TODO: boolかtryか
+    def leave_servo_mode(self) -> None:
         # self.shm.maybe_slave_modeは0のとき必ず通常モード。
         # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
         self.shm.maybe_slave_mode = 0
-        return True
 
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
         # NOTE: タイムアウトエラーが発生する場合は実装する
