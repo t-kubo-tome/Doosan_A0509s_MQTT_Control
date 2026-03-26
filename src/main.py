@@ -51,14 +51,19 @@ if __name__ == '__main__':
     import os
     os.environ["TOOL_ID"] = str(kwargs.pop("tool_id"))
 
-    if kwargs.pop("gui"):   
+    # GUIでコマンドを選択して実行するモード
+    if kwargs.pop("gui"):
         import tkinter as tk
         from common.gui import MQTTWin
+        # ウインドウ
         root = tk.Tk()
         mqwin = MQTTWin(root, **kwargs)
+        # 最前面に移動
         mqwin.root.lift()
+        # Xボタンが押された時の動作
         root.protocol("WM_DELETE_WINDOW", mqwin.on_closing)
         root.mainloop()
+    # MQTTでコマンドを受信して実行するモード
     else:
         from common.headless import HeadlessLoop
         headless_loop = HeadlessLoop(**kwargs)

@@ -44,9 +44,10 @@ class Doosan_CON(ControlBase):
                 self.robot = DoosanRobotExt(
                     config.robot_ip,
                     "queue",
+                    # 制御周期
                     config.t_intv,
                     logger=self.robot_logger,
-                    # ログは制御より優先度を下げる (周期を長くとる)
+                    # ログ収集周期は制御より優先度を下げる (周期を長くとる)
                     log_t_intv=config.t_intv * 2,
                 )
             if not self.robot.start():
