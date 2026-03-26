@@ -27,23 +27,23 @@ class ControlProcess:
         # NOTE: robot_loggerをrun_processで初期化するため、
         # ControlHardwareを__init__内で初期化できないため、
         # このような実装にしている
-        self.robot: ControlHardware | None = None
+        self.hw: ControlHardware | None = None
 
     def format_error(self, e: Exception) -> str:
         """例外をフォーマットする。"""
-        if self.robot is not None:
-            return self.robot.format_error(e)
+        if self.hw is not None:
+            return self.hw.format_error(e)
         else:
             s = "Error trace: " + "\n" + traceback.format_exc()
         return s
 
     def del_robot(self) -> None:
         """ロボットのインスタンスを削除する。"""
-        if self.robot is not None:
-            self.robot.disable()
-            self.robot.stop()
-            self.robot.on_del()
-            self.robot = None
+        if self.hw is not None:
+            self.hw.disable()
+            self.hw.stop()
+            self.hw.on_del()
+            self.hw = None
 
     # END: 汎用
 
@@ -57,9 +57,9 @@ class ControlProcess:
             # このような実装にしている
             # NOTE: 再接続するためには、APIインスタンスの再生成
             # だけでなく、呼び出しプロセスの再起動も必要かもしれない
-            if self.robot is None:
-                self.robot = ControlHardware(self)
-            if not self.robot.start():
+            if self.hw is None:
+                self.hw = ControlHardware(self)
+            if not self.hw.start():
                 raise ValueError("Failed to start robot")
             # NOTE: all_robot_stateはDoosanRobotExtの中に組み込めるかも
             self.all_robot_state = {}
@@ -82,7 +82,7 @@ class ControlProcess:
         """ロボットのモーターの電源をONにする。例外の送出は禁止。"""
         self.logger.info("Enabling robot")
         try:
-            if not self.robot.enable():
+            if not self.hw.enable():
                 raise ValueError("Failed to enable robot")
             return True
         except Exception as e:
@@ -94,7 +94,7 @@ class ControlProcess:
         """ロボットのモーターの電源をOFFにする。例外の送出は禁止。"""
         self.logger.info("Disabling robot")
         try:
-            if not self.robot.disable():
+            if not self.hw.disable():
                 raise ValueError("Failed to disable robot")
             return True
         except Exception as e:
@@ -106,7 +106,7 @@ class ControlProcess:
         """ロボットのエリア制限をON/OFFする。例外の送出は禁止。"""
         self.logger.info(f"Setting area enabled: {enable}")
         try:
-            if not self.robot.set_area_enabled(enable):
+            if not self.hw.set_area_enabled(enable):
                 raise ValueError("Failed to set area enabled")
         except Exception as e:
             self.logger.error("Error setting area enabled")
@@ -117,7 +117,7 @@ class ControlProcess:
         """ロボットをデフォルトの姿勢に移動させる。例外の送出は禁止。"""
         self.logger.info("Tidy pose")
         try:
-            if not self.robot.move_joint(*config.tidy_joint):
+            if not self.hw.move_joint(*config.tidy_joint):
                 raise ValueError("Failed to move to tidy pose")
             return True
         except Exception as e:
@@ -129,7 +129,7 @@ class ControlProcess:
         """ロボットを関節空間で移動させる。例外の送出は禁止。"""
         self.logger.info("Move joint")
         try:
-            ret = self.robot.move_joint(*joints)
+            ret = self.hw.move_joint(*joints)
             if not ret:
                 raise ValueError("Failed to move to joint pose")
             return True
@@ -142,7 +142,7 @@ class ControlProcess:
         """ロボットのエラーをクリアする。例外の送出は禁止。"""
         self.logger.info("Clear error")
         try:
-            if not self.robot.clear_error():
+            if not self.hw.clear_error():
                 raise ValueError("Failed to clear error")
             return True
         except Exception as e:
@@ -160,7 +160,7 @@ class ControlProcess:
             joints = np.asarray(joints)
             joints[joint] += direction
             joints = joints.tolist()
-            is_success = self.robot.move_joint(*joints)
+            is_success = self.hw.move_joint(*joints)
             if not is_success:
                 raise ValueError("move_joint failed")
             return True
@@ -179,7 +179,7 @@ class ControlProcess:
             poses = np.asarray(poses)
             poses[axis] += direction
             poses = poses.tolist()
-            is_success = self.robot.move_pose(*poses)
+            is_success = self.hw.move_pose(*poses)
             if not is_success:
                 raise ValueError("move_pose failed")
             return True
@@ -200,7 +200,7 @@ class ControlProcess:
         # 順番固定
         with self.slave_mode_lock:
             self.shm.maybe_slave_mode = 1
-            self.robot.enter_servo_mode()
+            self.hw.enter_servo_mode()
 
     def leave_servo_mode(self) -> None:
         """ロボットをサーボモードから離れる。"""
@@ -208,14 +208,14 @@ class ControlProcess:
         # self.shm.maybe_slave_modeは1のとき基本的にスレーブモードだが、
         # 変化前後の短い時間は通常モードの可能性がある。
         # 順番固定
-        self.robot.leave_servo_mode()
+        self.hw.leave_servo_mode()
         self.shm.maybe_slave_mode = 0
 
     def should_recover_automatic_on_timeout_error(self, e_leave) -> bool:
         """タイムアウトエラーが発生したときに自動的に回復するかどうか。例外の送出は禁止。"""
         self.logger.info("Should recover automatic on timeout error")
         try:
-            ret = self.robot.should_recover_automatic_on_timeout_error(e_leave)
+            ret = self.hw.should_recover_automatic_on_timeout_error(e_leave)
             if not ret:
                 raise ValueError("Failed to determine if automatic recovery is possible on timeout error")
             return True
@@ -228,7 +228,7 @@ class ControlProcess:
         """タイムアウトエラーが発生したときに自動的に回復する処理を行う。例外の送出は禁止。"""
         self.logger.info("Attempting automatic recover from timeout error")
         try:
-            ret = self.robot.recover_automatic_on_timeout_error()
+            ret = self.hw.recover_automatic_on_timeout_error()
             if not ret:
                 raise ValueError("Failed to recover from timeout error")
             return True
@@ -241,7 +241,7 @@ class ControlProcess:
         """回復可能なエラーが発生したときに自動的に回復する処理を行う。例外の送出は禁止。"""
         self.logger.info("Attempting automatic recover from recoverable error")
         try:
-            ret = self.robot.recover_automatic_on_recoverable_error()
+            ret = self.hw.recover_automatic_on_recoverable_error()
             if not ret:
                 raise ValueError("Failed to recover from recoverable error")
             return True
@@ -251,10 +251,10 @@ class ControlProcess:
             return False
 
     def on_step_start_in_control_loop(self) -> None:
-        self.robot.on_step_start_in_control_loop()
+        self.hw.on_step_start_in_control_loop()
 
     def should_wait_control_loop(self) -> bool:
-        self.robot.should_wait_control_loop()
+        self.hw.should_wait_control_loop()
 
     def is_ready_to_stop(self) -> bool:
         # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
@@ -273,7 +273,7 @@ class ControlProcess:
     ) -> bool:
         """関節のスレーブモードでの制御値をロボットに送る。例外の送出は禁止。"""
         try:
-            if not self.robot.move_joint_servo(*control):
+            if not self.hw.move_joint_servo(*control):
                 raise ValueError("Failed to send servoJ command")
             return True
         except Exception as e:
@@ -295,7 +295,7 @@ class ControlProcess:
     ) -> bool:
         """関節のスレーブモードでの速度制御値をロボットに送る。例外の送出は禁止。"""
         try:
-            if not self.robot.move_joint_servo_by_vel(*control):
+            if not self.hw.move_joint_servo_by_vel(*control):
                 raise ValueError("Failed to send servoJ command")
             return True
         except Exception as e:
@@ -312,28 +312,28 @@ class ControlProcess:
     # BEGIN: 状態取得
 
     def get_current_pose_rt(self) -> List[float]:
-        return self.robot.get_current_pose_rt()
+        return self.hw.get_current_pose_rt()
 
     def get_current_joint_rt(self) -> List[float]:
-        return self.robot.get_current_joint_rt()
+        return self.hw.get_current_joint_rt()
 
     def get_current_force_rt(self) -> List[float]:
-        return self.robot.get_current_force_rt()
+        return self.hw.get_current_force_rt()
 
     def get_all_robot_state_at_once(self) -> None:
-        return self.robot.get_all_robot_state_at_once()
+        return self.hw.get_all_robot_state_at_once()
 
     def get_enabled(self) -> bool:
-        return self.robot.get_enabled()
+        return self.hw.get_enabled()
 
     def get_is_in_servo_mode(self) -> bool:
-        return self.robot.get_is_in_servo_mode()
+        return self.hw.get_is_in_servo_mode()
 
     def get_is_emergency_stopped(self) -> bool:
-        return self.robot.get_is_emergency_stopped()
+        return self.hw.get_is_emergency_stopped()
 
     def get_errors(self) -> List[Dict[str, Any]]:
-        return self.robot.get_errors()
+        return self.hw.get_errors()
 
     # END: 状態取得
 
@@ -1439,7 +1439,7 @@ class ControlProcess:
                 self.pose[18] = 1
                 self.pose[17] = 0
                 return True
-            ret = self.robot._tool_change_impl(next_tool_id)
+            ret = self.hw._tool_change_impl(next_tool_id)
             if not ret:
                 raise ValueError("Tool change implementation failed")
             # NOTE: より良い方法がないか
@@ -1453,7 +1453,7 @@ class ControlProcess:
             return True
         except Exception as e:
             self.logger.error("Error during tool change")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.hw.format_error(e)}")
             self.pose[18] = 2
             self.pose[17] = 0
             return False
@@ -1462,26 +1462,26 @@ class ControlProcess:
         """箱を動かすデモ。"""
         self.logger.info("Demo put down box")
         try:
-            ret = self.robot._demo_put_down_box_impl()
+            ret = self.hw._demo_put_down_box_impl()
             if not ret:
                 raise ValueError("Demo put down box implementation failed")
             return True
         except Exception as e:
             self.logger.error("Error during demo put down box")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.hw.format_error(e)}")
             return False
 
     def line_cut(self) -> bool:
         """箱を切るデモ。"""
         self.logger.info("Line cut")
         try:
-            ret = self.robot._line_cut_impl()
+            ret = self.hw._line_cut_impl()
             if not ret:
                 raise ValueError("Line cut implementation failed")
             return True
         except Exception as e:
             self.logger.error("Error during line cut")
-            self.logger.error(f"{self.robot.format_error(e)}")
+            self.logger.error(f"{self.hw.format_error(e)}")
             return False
 
     def setup_logger(self, log_queue):
