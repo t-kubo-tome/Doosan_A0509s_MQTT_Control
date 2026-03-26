@@ -20,7 +20,7 @@ from robot.shared_memory import NamedSharedMemory
 class ControlBase(ABC):
     """ロボットの制御ループの基底クラス."""
 
-    # START: 実装必須
+    # BEGIN: 実装必須
 
     # BEGIN: 汎用
 
@@ -232,9 +232,9 @@ class ControlBase(ABC):
 
     # END: ハンド関連
 
-    # STOP: 実装必須
+    # END: 実装必須
 
-    # START: オーバーライドの可能性あり
+    # BEGIN: オーバーライドの可能性あり
 
     def on_step_start_in_control_loop(self) -> None:
         # ロボット固有の処理を含む
@@ -251,9 +251,9 @@ class ControlBase(ABC):
         # TODO: Cobottaには必要だがURに必要かは不明
         return (self.control == self.last_control).all()
 
-    # STOP: オーバーライドの可能性あり
+    # END: オーバーライドの可能性あり
 
-    # START: オーバーライドの可能性なし
+    # BEGIN: オーバーライドの可能性なし
 
     def __init__(self) -> None:
         self._on_init()
@@ -1399,4 +1399,4 @@ class ControlBase(ABC):
         self.handler.close()
         self.robot_handler.close()
 
-    # STOP: オーバーライドの可能性なし
+    # END: オーバーライドの可能性なし

@@ -27,7 +27,7 @@ class LoopResult(Enum):
 class MonitorBase(ABC):
     """ロボットのモニタリングループの基底クラス."""
 
-    # START: 実装必須
+    # BEGIN: 実装必須
 
     @abstractmethod
     def _on_init(self) -> None:
@@ -57,9 +57,9 @@ class MonitorBase(ABC):
     def reconnect_after_timeout(self, e: Exception) -> bool:
         pass
 
-    # STOP: 実装必須
+    # END: 実装必須
 
-    # START: オーバーライドの可能性なし
+    # BEGIN: オーバーライドの可能性なし
 
     def __init__(self) -> None:
         self._on_init()
@@ -240,4 +240,4 @@ class MonitorBase(ABC):
             self.robot_handler.close()
 
 
-    # STOP: オーバーライドの可能性なし
+    # END: オーバーライドの可能性なし
