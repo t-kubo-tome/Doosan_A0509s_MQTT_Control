@@ -40,6 +40,8 @@ class Doosan_CON(ControlBase):
             # NOTE: robot_loggerをrun_processで初期化するため、
             # DoosanRobotExtを__init__内で初期化できないため、
             # このような実装にしている
+            # NOTE: 再接続するためには、APIインスタンスの再生成
+            # だけでなく、呼び出しプロセスの再起動も必要かもしれない
             if self.robot is None:
                 self.robot = DoosanRobotExt(
                     config.robot_ip,
