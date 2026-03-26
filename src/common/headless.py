@@ -81,8 +81,24 @@ class HeadlessLoop:
         self.response_topic = f"dev/{self.robot_uuid}/response"
         self.response_client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+        self.response_client.on_connect = self.on_connect
+        self.response_client.on_disconnect = self.on_disconnect
         self.response_client.connect(self.mqtt_server, 1883, 60)
         self.response_client.loop_start()
+
+    def on_connect(self, client, userdata, connect_flags, reason_code, properties) -> None:
+        self.logger.info("MQTT connected with result code: " + str(reason_code))
+
+    def on_disconnect(
+        self,
+        client,
+        userdata,
+        disconnect_flags,
+        reason_code,
+        properties,
+    ) -> None:
+        if reason_code != 0:
+            self.logger.warning("MQTT unexpected disconnection.")
 
     def _signal_handler(self, signum, frame):
         """Graceful shutdownのためのシグナルハンドラ"""
@@ -140,7 +156,6 @@ class HeadlessLoop:
 
         # MQTTレスポンス用クライアントの初期化
         self._setup_response_mqtt()
-        self.logger.info(f"Response MQTT client connected to {self.mqtt_server}")
 
     def _execute_command(self, cmd: dict) -> None:
         """コマンドを実行"""
@@ -399,7 +414,7 @@ class HeadlessLoop:
             self.response_client.loop_stop()
             self.response_client.disconnect()
         if self.logger:
-            self.logger.info("Response MQTT client disconnected")
+            self.logger.info("MQTT client disconnected")
         if self.pm is not None:
             self.pm.stop_all_processes()
         if self.logger:
@@ -418,7 +433,7 @@ class HeadlessLoop:
             # 将来的にはコマンドで接続してもよい
             self.logger.info("Auto-connecting Robot...")
             self._cmd_connect_robot()
-            self.logger.info("Auto-connecting MQTT...")
+            self.logger.info("Auto-connecting MQTT Receiver...")
             self._cmd_connect_mqtt()
 
             while self.running:

@@ -35,7 +35,8 @@ class MQTT_Recv_Base(ABC):
         self.last_registered = None
         self.command_queue = None
 
-    def on_connect(self, client, userdata, connect_flags, reason_code, properties):
+    def on_connect(self, client, userdata, connect_flags, reason_code, properties) -> None:
+        self.logger.info("MQTT connected with result code: " + str(reason_code))
         # マネージャに登録
         now = time.time()
         self._register_to_manager(now)
@@ -55,7 +56,7 @@ class MQTT_Recv_Base(ABC):
         disconnect_flags,
         reason_code,
         properties,
-    ):
+    ) -> None:
         if reason_code != 0:
             self.logger.warning("MQTT Unexpected disconnection.")
 
@@ -78,6 +79,7 @@ class MQTT_Recv_Base(ABC):
                 # 既に異なるVRコントローラに接続されている場合はその接続を解除
                 if self.mqtt_ctrl_topic is not None:
                     self.client.unsubscribe(self.mqtt_ctrl_topic)
+                    self.logger.info("unsubscribe from: " + self.mqtt_ctrl_topic)
                 self.mqtt_ctrl_topic = mqtt_ctrl_topic
                 self.client.subscribe(mqtt_ctrl_topic)
                 self.logger.info("subscribe to: " + mqtt_ctrl_topic)
