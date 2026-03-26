@@ -23,8 +23,12 @@ class NamedSharedMemoryBase:
         dtype = np.dtype("float32")
         self._create = create
         sm_size = self.size * dtype.itemsize
-        self._sm = shared_memory.SharedMemory(
-            name=self.name, create=self._create, size=sm_size)
+        try:
+            self._sm = shared_memory.SharedMemory(
+                name=self.name, create=self._create, size=sm_size)
+        except FileExistsError:
+            self._sm = shared_memory.SharedMemory(
+                name=self.name, create=False, size=sm_size)
         self._ar = np.ndarray((self.size,), dtype=dtype, buffer=self._sm.buf)
         if self._create:
             self._ar[:] = 0
