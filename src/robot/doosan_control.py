@@ -16,6 +16,9 @@ class Doosan_CON(ControlBase):
     # BEGIN: 汎用
 
     def _on_init(self) -> None:
+        # NOTE: robot_loggerをrun_processで初期化するため、
+        # DoosanRobotExtを__init__内で初期化できないため、
+        # このような実装にしている
         self.robot: DoosanRobotExt | None = None
 
     def format_error(self, e: Exception) -> str:
@@ -50,8 +53,14 @@ class Doosan_CON(ControlBase):
                 raise ValueError("Failed to start robot")
             # NOTE: all_robot_stateはDoosanRobotExtの中に組み込めるかも
             self.all_robot_state = {}
+            # ロボットによっては別のモニタプロセスで状態値を取得できないので
+            # 制御プロセス中の別のスレッドで取得する
             self.init_monitor_loop()
+            # NOTE: 接続を何度も可能にする場合、ツールが複数ある場合は、
+            # 最初のツールIDではだめな場合がある
             tool_id = int(os.environ["TOOL_ID"])
+            # NOTE: ここでハンドの接続に成功したかどうか判定してもよい
+            # その場合ハンドの接続に成功しなくても使えるオプションを設けるとよい
             self.find_and_setup_hand(tool_id)
             return True
         except Exception as e:
@@ -68,8 +77,6 @@ class Doosan_CON(ControlBase):
         except Exception as e:
             self.logger.error("Error enabling robot")
             self.logger.error(f"{self.format_error(e)}")
-            if "ur_rtde: Failed to start control script, before timeout of 5 seconds" in str(e):
-                self.logger.error("This error may occur occasionally. Try enabling several times before giving up")
             return False
 
     def disable(self) -> bool:
