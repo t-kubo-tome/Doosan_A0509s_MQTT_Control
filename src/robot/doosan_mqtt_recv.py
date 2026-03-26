@@ -1,42 +1,10 @@
-from dataclasses import dataclass
 from typing import Any
 
-from common.mqtt_recv_base import MQTT_Recv_Base, MQTTConfig
-from robot.config import (
-    MQTT_CTRL_TOPIC,
-    MQTT_MANAGE_TOPIC,
-    MQTT_ROBOT_STATE_TOPIC,
-    MQTT_SERVER,
-    ROBOT_MODEL_ENV,
-    ROBOT_UUID,
-    joint_unit_internal,
-    joint_unit_external,
-)
-from robot.shared_memory import NamedSharedMemory
-
-
-@dataclass
-class DoosanMQTTConfig(MQTTConfig):
-    pass
+from common.mqtt_recv_base import MQTT_Recv_Base
 
 
 class Doosan_MQTT_Recv(MQTT_Recv_Base):
-    def _get_config(self) -> DoosanMQTTConfig:
-        return DoosanMQTTConfig(
-            mqtt_server=MQTT_SERVER,
-            robot_uuid=ROBOT_UUID,
-            robot_model=ROBOT_MODEL_ENV,
-            mqtt_ctrl_topic=MQTT_CTRL_TOPIC,
-            mqtt_manage_topic=MQTT_MANAGE_TOPIC,
-            mqtt_robot_state_topic=MQTT_ROBOT_STATE_TOPIC,
-            joint_unit_internal=joint_unit_internal,
-            joint_unit_external=joint_unit_external,
-        )
-
-    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
-        return NamedSharedMemory
-
-    def _init_other_than_config(self) -> None:
+    def _on_init(self) -> None:
         pass
 
     def _interpret_mqtt_ctrl_topic(self, js: dict[str, Any]) -> None:

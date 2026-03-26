@@ -1,5 +1,5 @@
 """ツール一覧。"""
-from robot.config import HAND_IP
+from robot import config
 from robot.qbsofthand_industry_control import QbSoftHandIndustryControl
 
 # 以降に使用するツール情報を追加すること
@@ -12,7 +12,7 @@ tool_infos = [
         # ツール先端の実測位置などを使用してもいいかもしれない
         "tool_def": [2.4, 14.3, 80.5, 0.0, 0.0, 0.0],
         "args": {
-            "hand_ip": HAND_IP,
+            "hand_ip": config.hand_ip,
             "max_timeout": 10,
         }
     },

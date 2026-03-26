@@ -14,14 +14,7 @@ from typing import Optional
 from common.log import MicrosecondFormatter
 from common.process_manager import ProcessManager
 from common.utils import AngleUnitConverter
-from robot.config import (
-    ROBOT_NAME,
-    SUPPORTED_COMMANDS_COMMON,
-    SUPPORTED_COMMANDS_GUI_ONLY,
-    topic_types,
-    joint_unit_internal,
-    joint_unit_external,
-)
+from robot import config
 from robot.tools import tool_ids
 
 
@@ -124,15 +117,15 @@ class MQTTWin:
         self.setup_logger(log_queue=log_queue)
         self.gui_log_queue = queue.Queue()
         self.supported_commands = (
-            SUPPORTED_COMMANDS_COMMON + SUPPORTED_COMMANDS_GUI_ONLY
+            config.supported_commands_common + config.supported_commands_gui_only
         )
         self._angle_unit_converter = AngleUnitConverter(
-            joint_unit_internal, joint_unit_external
+            config.joint_unit_internal, config.joint_unit_external
         )
         self.logger.info("Starting Process!")
 
         self.root = root
-        self.root.title(f"MQTT-{ROBOT_NAME} Controller")
+        self.root.title(f"MQTT-{config.robot_name} Controller")
         self.root.geometry("1100x1000")
 
         for col in range(10):
@@ -486,9 +479,9 @@ class MQTTWin:
 #        tk.Label(self.root, text="Topics").grid(
 #            row=row, column=0, padx=2, pady=10, sticky="w", columnspan=8)
         self.string_var_topics = {
-            topic: tk.StringVar() for topic in topic_types}
+            topic: tk.StringVar() for topic in config.topic_types}
         self.topic_monitors = {}
-        for i, topic_type in enumerate(topic_types):
+        for i, topic_type in enumerate(config.topic_types):
             frame_topic = tk.Frame(self.root)
             frame_topic.grid(
                 row=row+1+3*i, column=0, padx=2, pady=2,
@@ -520,7 +513,7 @@ class MQTTWin:
             self.topic_monitors[topic_type].pack(
                 side="left", padx=2, expand=True, fill="both")
 
-        row += 1 + 3*len(topic_types)
+        row += 1 + 3*len(config.topic_types)
 
         frame_sm = tk.Frame(self.root)
         frame_sm.grid(

@@ -1,34 +1,12 @@
 # Doosanを制御する
 import os
 import traceback
-from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import numpy as np
 
-from common.control_base import ControlBase, ControlConfig
-from robot.config import (
-    HAND_IP,
-    N_JOINTS,
-    ROBOT_IP,
-    T_INTV,
-    abs_joint_soft_limit,
-    control_interface,
-    delay_for_interpolation,
-    eff_accel_limits,
-    eff_speed_limits,
-    filter_kind,
-    move_robot,
-    n_windows,
-    stopped_velocity_eps,
-    tidy_joint,
-    target_state_abs_joint_diff_limit,
-    use_first_speed_limit,
-    use_interp,
-    use_normalize_target_to_nearest,
-    use_second_speed_limit,
-)
-from robot.shared_memory import NamedSharedMemory
+from common.control_base import ControlBase
+from robot import config
 from robot.doosan_robot_ext import ROBOT_STATE, DoosanRobotExt
 from robot.tools import tool_classes, tool_infos
 
@@ -36,40 +14,8 @@ from robot.tools import tool_classes, tool_infos
 reset_default_state = True
 
 
-@dataclass
-class DoosanControlConfig(ControlConfig):
-    robot_ip: str
-    hand_ip: str
-
-
 class Doosan_CON(ControlBase):
-    def _get_make_shared_memory(self) -> type[NamedSharedMemory]:
-        return NamedSharedMemory
-
-    def _get_config(self) -> DoosanControlConfig:
-        return DoosanControlConfig(
-            n_joints=N_JOINTS,
-            t_intv=T_INTV,
-            move_robot=move_robot,
-            filter_kind=filter_kind,
-            n_windows=n_windows,
-            use_interp=use_interp,
-            delay_for_interpolation=delay_for_interpolation,
-            use_first_speed_limit=use_first_speed_limit,
-            use_second_speed_limit=use_second_speed_limit,
-            eff_speed_limits=eff_speed_limits,
-            eff_accel_limits=eff_accel_limits,
-            abs_joint_soft_limit=abs_joint_soft_limit,
-            target_state_abs_joint_diff_limit=target_state_abs_joint_diff_limit,
-            stopped_velocity_eps=stopped_velocity_eps,
-            use_normalize_target_to_nearest=use_normalize_target_to_nearest,
-            control_interface=control_interface,
-            tidy_joint=tidy_joint,
-            robot_ip=ROBOT_IP,
-            hand_ip=HAND_IP,
-        )
-
-    def _init_other_than_config(self) -> None:
+    def _on_init(self) -> None:
         self.robot: DoosanRobotExt | None = None
 
     def connect_robot(self) -> bool:
@@ -77,11 +23,11 @@ class Doosan_CON(ControlBase):
         try:
             if self.robot is None:
                 self.robot = DoosanRobotExt(
-                    self.config.robot_ip,
+                    config.robot_ip,
                     "queue",
-                    self.config.t_intv,
+                    config.t_intv,
                     logger=self.robot_logger,
-                    log_t_intv=self.config.t_intv * 2,
+                    log_t_intv=config.t_intv * 2,
                 )
             if not self.robot.start():
                 raise ValueError("Failed to start robot")
@@ -332,7 +278,7 @@ class Doosan_CON(ControlBase):
     def tidy_pose(self) -> bool:
         self.logger.info("Tidy pose")
         try:
-            ret = self.robot.move_joint(*self.config.tidy_joint)
+            ret = self.robot.move_joint(*config.tidy_joint)
             if not ret:
                 raise ValueError("Failed to move to tidy pose")
             return True

@@ -4,13 +4,9 @@ from multiprocessing import Process
 from common.control_archiver import CON_Archiver
 from common.ipc import TopicMemory
 from common.monitor_gui import run_joint_monitor_gui
-from robot import (
-    CON,
-    MON,
-    MQTT_Recv,
-    NamedSharedMemory,
-)
-from robot.config import ROBOT_NAME, topic_types
+from robot import CON, MON, MQTT_Recv
+from robot.config import robot_name, topic_types
+from robot.shared_memory import NamedSharedMemory
 
 
 class ProcessManager:
@@ -76,7 +72,7 @@ class ProcessManager:
                   self.monitor_queue,
                   logging_dir,
                   disable_mqtt),
-            name=f"{ROBOT_NAME}-monitor")
+            name=f"{robot_name}-monitor")
         self.monP.start()
 
     def startControl(self, logging_dir: str | None = None):
@@ -89,7 +85,7 @@ class ProcessManager:
                   self.control_to_archiver_queue,
                   self.monitor_queue,
                 ),
-            name=f"{ROBOT_NAME}-control")
+            name=f"{robot_name}-control")
         self.ctrlP.start()
 
         self.ctrl_archiver = CON_Archiver()
@@ -100,13 +96,13 @@ class ProcessManager:
                   logging_dir,
                   self.control_to_archiver_queue,
                   ),
-            name=f"{ROBOT_NAME}-control-archiver")
+            name=f"{robot_name}-control-archiver")
         self.ctrl_archiverP.start()
 
     def startMonitorGUI(self):
         self.monitor_guiP = Process(
             target=run_joint_monitor_gui,
-            name=f"{ROBOT_NAME}-monitor-gui",
+            name=f"{robot_name}-monitor-gui",
         )
         self.monitor_guiP.start()
 

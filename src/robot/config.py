@@ -9,29 +9,28 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 # --- 環境変数（.envで変更するもの） ---
-ROBOT_UUID = os.getenv("ROBOT_UUID", "ur-real")
-ROBOT_MODEL_ENV = os.getenv("ROBOT_MODEL", "doosan-remote-vr")
-MQTT_SERVER = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
-ROBOT_IP = os.getenv("ROBOT_IP", "192.168.6.43")
-HAND_IP = os.getenv("HAND_IP", "192.168.5.44")
-MQTT_CTRL_TOPIC = os.getenv("MQTT_CTRL_TOPIC", "control")
-MQTT_MANAGE_TOPIC = os.getenv("MQTT_MANAGE_TOPIC", "mgr")
-MQTT_ROBOT_STATE_TOPIC = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")
-MQTT_MODE = os.getenv("MQTT_MODE", "metawork")
-SAVE = os.getenv("SAVE", "true") == "true"
-MOVE = os.getenv("MOVE", "true") == "true"
+robot_uuid = os.getenv("ROBOT_UUID", "ur-real")
+robot_model_env = os.getenv("ROBOT_MODEL", "doosan-remote-vr")
+mqtt_server = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
+robot_ip = os.getenv("ROBOT_IP", "192.168.6.43")
+hand_ip = os.getenv("HAND_IP", "192.168.5.44")
+mqtt_ctrl_topic = os.getenv("MQTT_CTRL_TOPIC", "control")
+mqtt_manage_topic = os.getenv("MQTT_MANAGE_TOPIC", "mgr")
+mqtt_robot_state_topic = os.getenv("MQTT_ROBOT_STATE_TOPIC", "robot")
+save = os.getenv("SAVE", "true") == "true"
+move = os.getenv("MOVE", "true") == "true"
 
 # --- ハードコード設定（ユーザーによる変更は基本的に不要） ---
-SHM_NAME = "doosan"
-SHM_SIZE = 64
-N_JOINTS = 6
-ABS_JOINT_LIMIT = [360, 95, 135, 360, 135, 360]
-T_INTV = 0.05
-ROBOT_NAME = "Doosan"
-ROBOT_VENDOR = "Doosan Robotics"
-ROBOT_MODEL = "A0509s"
+shm_name = "doosan"
+shm_size = 64
+n_joints = 6
+abs_joint_limit = [360, 95, 135, 360, 135, 360]
+t_intv = 0.05
+robot_name = "Doosan"
+robot_vendor = "Doosan Robotics"
+robot_model = "A0509s"
 # API/GUIによる指令がサポートされるコマンド
-SUPPORTED_COMMANDS_COMMON = [
+supported_commands_common = [
     "enable",
     "disable",
     "tidy_pose",
@@ -48,13 +47,13 @@ SUPPORTED_COMMANDS_COMMON = [
     # "set_area_enabled",
 ]
 # APIによる指令がサポートされるコマンド
-SUPPORTED_COMMANDS_API_ONLY = [
+supported_commands_api_only = [
     "shutdown",
     "get_command_list",
     "get_joint_names",
 ]
 # GUIによる指令がサポートされるコマンド
-SUPPORTED_COMMANDS_GUI_ONLY = [
+supported_commands_gui_only = [
     "connect_robot",
     "connect_mqtt",
 ]
@@ -99,8 +98,8 @@ accel_limit_ratio = 0.5
 
 control_interface: Literal["position", "velocity"] = "velocity"
 
-move_robot = MOVE
-save_control = SAVE
+move_robot = move
+save_control = save
 
 tidy_joint = [0.0, 0.0, -90.0, 0.0, -90.0, 0.0]
 
@@ -120,6 +119,6 @@ speed_limits = np.array(speed_limits)
 eff_speed_limits = speed_limits * speed_limit_ratio
 accel_limits = np.array(accel_limits)
 eff_accel_limits = accel_limits * accel_limit_ratio
-abs_joint_limit = ABS_JOINT_LIMIT
+abs_joint_limit = abs_joint_limit
 abs_joint_limit = np.array(abs_joint_limit)
 abs_joint_soft_limit = abs_joint_limit - 10

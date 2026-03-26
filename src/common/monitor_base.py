@@ -14,17 +14,9 @@ from typing import Any, Dict, List, TextIO
 import psutil
 from paho.mqtt import client as mqtt
 
-from common.shared_memory_base import NamedSharedMemoryBase
 from common.utils import AngleUnitConverter
-
-
-@dataclass
-class MonitorConfig:
-    mqtt_server: str
-    mqtt_robot_state_topic: str  # "robot/<robot_uuid>" 形式
-    save_state: bool
-    joint_unit_internal: str
-    joint_unit_external: str
+from robot import config
+from robot.shared_memory import NamedSharedMemory
 
 
 class LoopResult(Enum):
@@ -39,15 +31,7 @@ class MonitorBase(ABC):
     # START: 実装必須
 
     @abstractmethod
-    def _get_config(self) -> MonitorConfig:
-        pass
-
-    @abstractmethod
-    def _get_make_shared_memory(self) -> type[NamedSharedMemoryBase]:
-        pass
-
-    @abstractmethod
-    def _init_other_than_config(self) -> None:
+    def _on_init(self) -> None:
         pass
 
     @abstractmethod
@@ -79,10 +63,9 @@ class MonitorBase(ABC):
     # START: オーバーライドの可能性なし
 
     def __init__(self) -> None:
-        self.config = self._get_config()
-        self._init_other_than_config()
+        self._on_init()
         self._angle_unit_converter = AngleUnitConverter(
-            self.config.joint_unit_internal, self.config.joint_unit_external)
+            config.joint_unit_internal, config.joint_unit_external)
 
     def init_realtime(self) -> None:
         os_used = sys.platform
@@ -121,7 +104,7 @@ class MonitorBase(ABC):
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
-        self.client.connect(self.config.mqtt_server, 1883, 60)
+        self.client.connect(config.mqtt_server, 1883, 60)
         self.client.loop_start()
 
     def get_tool_info(
@@ -152,8 +135,8 @@ class MonitorBase(ABC):
             if now - last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
                 if self.client is not None:
                     jss = json.dumps(actual_joint_js)
-                    self.client.publish(self.config.mqtt_robot_state_topic, jss)
-                    actual_joint_js["topic"] = self.config.mqtt_robot_state_topic
+                    self.client.publish(config.mqtt_robot_state_topic, jss)
+                    actual_joint_js["topic"] = config.mqtt_robot_state_topic
                 self.topic_memory.write("robot", actual_joint_js)
                 last = now
 
@@ -210,7 +193,7 @@ class MonitorBase(ABC):
     ) -> None:
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.shm = self._get_make_shared_memory()(create=False)
+        self.shm = NamedSharedMemory(create=False)
         self.topic_memory = topic_memory
         self.slave_mode_lock = slave_mode_lock
         self.monitor_pipe = monitor_pipe
@@ -223,7 +206,7 @@ class MonitorBase(ABC):
             self.connect_mqtt(disable_mqtt=disable_mqtt)
             # 処理ループ
             while True:
-                if self.config.save_state:
+                if config.save:
                     with open(
                         os.path.join(self.logging_dir, "state.jsonl"), "a"
                     ) as f:

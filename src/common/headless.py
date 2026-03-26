@@ -17,12 +17,7 @@ from paho.mqtt import client as mqtt
 
 from common.log import MicrosecondFormatter
 from common.process_manager import ProcessManager
-from robot.config import (
-    ROBOT_MODEL,
-    ROBOT_VENDOR,
-    SUPPORTED_COMMANDS_API_ONLY,
-    SUPPORTED_COMMANDS_COMMON,
-)
+from robot import config
 
 
 class HeadlessLoop:
@@ -75,7 +70,7 @@ class HeadlessLoop:
         self.robot_uuid: Optional[str] = None
         self.mqtt_server: Optional[str] = None
         self.supported_commands = (
-            SUPPORTED_COMMANDS_COMMON + SUPPORTED_COMMANDS_API_ONLY
+            config.supported_commands_common + config.supported_commands_api_only
         )
 
     def _setup_response_mqtt(self) -> None:
@@ -390,8 +385,8 @@ class HeadlessLoop:
             "message": message,
             "result": result,
             "timestamp": time.time(),
-            "vendor": ROBOT_VENDOR,
-            "model": ROBOT_MODEL,
+            "vendor": config.robot_vendor,
+            "model": config.robot_model,
         }
         self.response_client.publish(
             self.response_topic, json.dumps(response, ensure_ascii=False))

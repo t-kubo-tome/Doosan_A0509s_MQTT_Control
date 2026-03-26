@@ -9,33 +9,14 @@ from datetime import datetime
 
 from paho.mqtt import client as mqtt
 
-from common.shared_memory_base import NamedSharedMemoryBase
-
-
-@dataclass
-class MQTTConfig:
-    mqtt_server: str
-    robot_uuid: str
-    robot_model: str
-    mqtt_ctrl_topic: str
-    mqtt_manage_topic: str
-    mqtt_robot_state_topic: str
-    joint_unit_internal: str
-    joint_unit_external: str
+from robot import config
+from robot.shared_memory import NamedSharedMemory
 
 
 class MQTT_Recv_Base(ABC):
     """MQTTを受信して共有メモリに書き込むプロセスの基底クラス."""
     @abstractmethod
-    def _get_config(self) -> MQTTConfig:
-        pass
-
-    @abstractmethod
-    def _init_other_than_config(self) -> None:
-        pass
-
-    @abstractmethod
-    def _get_make_shared_memory(self) -> type[NamedSharedMemoryBase]:
+    def _on_init(self) -> None:
         pass
 
     @abstractmethod
@@ -49,8 +30,7 @@ class MQTT_Recv_Base(ABC):
         pass
 
     def __init__(self):
-        self.config = self._get_config()
-        self._init_other_than_config()
+        self._on_init()
         self.mqtt_ctrl_topic = None
         self.last_registered = None
         self.command_queue = None
@@ -60,11 +40,11 @@ class MQTT_Recv_Base(ABC):
         now = time.time()
         self._register_to_manager(now)
         # ロボットへの連絡用トピックの購読
-        mqtt_manage_rcv_topic = "dev/" + self.config.robot_uuid
+        mqtt_manage_rcv_topic = "dev/" + config.robot_uuid
         self.client.subscribe(mqtt_manage_rcv_topic)
         self.logger.info("subscribe to: " + mqtt_manage_rcv_topic)
         # ロボットの汎用制御コマンドトピックの購読
-        mqtt_command_topic = "dev/" + self.config.robot_uuid + "/command"
+        mqtt_command_topic = "dev/" + config.robot_uuid + "/command"
         self.client.subscribe(mqtt_command_topic)
         self.logger.info("subscribe to: " + mqtt_command_topic)
 
@@ -80,8 +60,8 @@ class MQTT_Recv_Base(ABC):
             self.logger.warning("MQTT Unexpected disconnection.")
 
     def on_message(self, client, userdata, msg):
-        mqtt_manage_rcv_topic = "dev/" + self.config.robot_uuid
-        mqtt_command_topic = "dev/" + self.config.robot_uuid + "/command"
+        mqtt_manage_rcv_topic = "dev/" + config.robot_uuid
+        mqtt_command_topic = "dev/" + config.robot_uuid + "/command"
         # 汎用制御コマンドトピックの処理
         if msg.topic == mqtt_command_topic:
             self._on_mqtt_command_topic(msg)
@@ -92,7 +72,7 @@ class MQTT_Recv_Base(ABC):
         elif msg.topic == mqtt_manage_rcv_topic:
             js = json.loads(msg.payload)
             goggles_id = js["devId"]
-            mqtt_ctrl_topic = self.config.mqtt_ctrl_topic + "/" + goggles_id
+            mqtt_ctrl_topic = config.mqtt_ctrl_topic + "/" + goggles_id
             # VRコントローラに始めて接続する場合か既に異なるVRコントローラに接続されている場合
             if mqtt_ctrl_topic != self.mqtt_ctrl_topic:
                 # 既に異なるVRコントローラに接続されている場合はその接続を解除
@@ -118,16 +98,16 @@ class MQTT_Recv_Base(ABC):
                 "cookie": "none",
             },
             "devType": "robot",
-            "type": self.config.robot_model,
+            "type": config.robot_model,
             "version": "none",
-            "devId": self.config.robot_uuid,
+            "devId": config.robot_uuid,
         }
         # マネージャに登録
-        self.client.publish(self.config.mqtt_manage_topic + "/register", json.dumps(info))
+        self.client.publish(config.mqtt_manage_topic + "/register", json.dumps(info))
         # 表示用
-        info["topic"] = self.config.mqtt_manage_topic + "/register"
+        info["topic"] = config.mqtt_manage_topic + "/register"
         self.topic_memory.write("mgr/register", dict(info))
-        self.logger.info("publish to: " + self.config.mqtt_manage_topic + "/register")
+        self.logger.info("publish to: " + config.mqtt_manage_topic + "/register")
         # 定期的な再登録用に時間を記録
         self.last_registered = now
 
@@ -153,7 +133,7 @@ class MQTT_Recv_Base(ABC):
         self.client.on_connect = self.on_connect         # 接続時のコールバック関数を登録
         self.client.on_disconnect = self.on_disconnect   # 切断時のコールバックを登録
         self.client.on_message = self.on_message         # メッセージ到着時のコールバック
-        self.client.connect(self.config.mqtt_server, 1883, 60)
+        self.client.connect(config.mqtt_server, 1883, 60)
         self.client.loop_start()   # 通信処理開始
 
     def setup_logger(self, log_queue):
@@ -168,7 +148,7 @@ class MQTT_Recv_Base(ABC):
     def run_proc(self, topic_memory, log_queue, command_queue=None):
         self.setup_logger(log_queue)
         self.logger.info("Process started")
-        self.shm = self._get_make_shared_memory()(create=False)
+        self.shm = NamedSharedMemory(create=False)
         self.topic_memory = topic_memory
         self.command_queue = command_queue
 
@@ -190,12 +170,12 @@ class MQTT_Recv_Base(ABC):
         except Exception:
             self.logger.error("Error in MQTT receive process: ", exc_info=True)
         finally:
-            info = {"devId": self.config.robot_uuid}
+            info = {"devId": config.robot_uuid}
             if self.client is not None:
                 self.client.publish(
-                    self.config.mqtt_manage_topic + "/unregister", json.dumps(info))
+                    config.mqtt_manage_topic + "/unregister", json.dumps(info))
                 self.logger.info(
-                    "publish to: " + self.config.mqtt_manage_topic + "/unregister")
+                    "publish to: " + config.mqtt_manage_topic + "/unregister")
                 self.client.loop_stop()
                 self.client.disconnect()
                 self.logger.info("MQTT client disconnected")

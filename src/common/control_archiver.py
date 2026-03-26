@@ -5,8 +5,8 @@ import queue
 import time
 from typing import TextIO
 
-from robot.config import T_INTV, save_control
-from robot import NamedSharedMemory
+from robot import config
+from robot.shared_memory import NamedSharedMemory
 
 
 class CON_Archiver:
@@ -22,7 +22,7 @@ class CON_Archiver:
                 return True
             try:
                 datum = self.control_to_archiver_queue.get(
-                    block=True, timeout=T_INTV)
+                    block=True, timeout=config.t_intv)
             except queue.Empty:
                 datum = None
             if ((f is not None) and 
@@ -73,7 +73,7 @@ class CON_Archiver:
                 # 基本はmonitor_start内のループにいるが、
                 # ログファイル変更またはプロセス終了時に
                 # monitor_startから抜ける
-                if save_control:
+                if config.save:
                     with open(
                         os.path.join(self.logging_dir, "control.jsonl"), "a"
                     ) as f:

@@ -7,11 +7,8 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 
-from robot.config import (
-    ABS_JOINT_LIMIT,
-    T_INTV,
-)
-from robot import NamedSharedMemory
+from robot import config
+from robot.shared_memory import NamedSharedMemory
 
 
 class JointMonitorPlot(QtWidgets.QWidget):
@@ -21,9 +18,9 @@ class JointMonitorPlot(QtWidgets.QWidget):
     ):
         """関節角度の時系列データのプロット。"""
         super().__init__()
-        self.n_joints = len(ABS_JOINT_LIMIT)
+        self.n_joints = len(config.abs_joint_limit)
         self.max_points = max_points
-        self.t_intv = T_INTV
+        self.t_intv = config.t_intv
         self.t_start = time.time()
         self.xdata = deque(maxlen=max_points)
         self.ydata = {
