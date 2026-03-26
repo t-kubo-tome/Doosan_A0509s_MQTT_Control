@@ -199,6 +199,9 @@ class MQTT_Recv_Base(ABC):
                 self.client.loop_stop()
                 self.client.disconnect()
                 self.logger.info("MQTT client disconnected")
+            # 他のプロセスにも周知
+            self.shm.exit_program = 1
+            time.sleep(1)
             self.shm.release()
             self.logger.info("Shared memory released")
             self.logger.info("Process stopped")

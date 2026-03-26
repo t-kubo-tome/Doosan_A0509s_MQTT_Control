@@ -434,6 +434,8 @@ class HeadlessLoop:
                 except queue.Empty:
                     # タイムアウト: ループを継続
                     pass
+                if self.pm.shm.exit_program == 1:
+                    break
         except Exception:
             if self.logger:
                 self.logger.error(f"Unexpected error in main loop: ", exc_info=True)

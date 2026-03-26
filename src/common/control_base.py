@@ -1359,6 +1359,9 @@ class ControlBase(ABC):
         self.del_monitor_loop()
         self.del_receive_command_loop()
         self.logger.info("Clean up threads")
+        # 他のプロセスにも周知
+        self.shm.exit_program = 1
+        time.sleep(1)
         self.shm.release()
         self.control_to_archiver_queue.close()
         self.monitor_queue.close()

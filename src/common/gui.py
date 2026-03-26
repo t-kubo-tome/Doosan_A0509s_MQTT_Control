@@ -552,6 +552,7 @@ class MQTTWin:
         self.update_monitor()
         self.start_update_gui_log()
         self.update_button_states_from_mqtt_control()
+        self.monitor_exit()
 
     def get_logging_dir(self):
         now = datetime.datetime.now()
@@ -975,6 +976,12 @@ class MQTTWin:
         if current_lines > 1000:
             excess_lines = current_lines - 1000
             box.delete("1.0", f"{excess_lines}.0")
+
+    def monitor_exit(self):
+        if self.pm.shm.exit_program == 1:
+            self.on_closing()
+            return
+        self.root.after(1000, self.monitor_exit)
 
     def on_closing(self):
         """ウインドウを閉じるときの処理"""

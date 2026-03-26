@@ -103,8 +103,10 @@ class JointMonitorPlot(QtWidgets.QWidget):
             for k in self.ydata:
                 self.curves[i][k].setData(x, y[k][i])
         if self.shm.exit_program == 1:
+            self.timer.stop()
+            self._stop_event.set()
             self.shm.release()
-            time.sleep(1)
+            QtWidgets.QApplication.instance().quit()
 
 
 def run_joint_monitor_gui():
