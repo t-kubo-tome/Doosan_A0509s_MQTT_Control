@@ -4,6 +4,7 @@ import logging
 import json
 import logging.handlers
 import os
+import sys
 import queue
 import time
 import multiprocessing
@@ -11,6 +12,8 @@ import multiprocessing.shared_memory
 from typing import Optional
 
 from common.doosan_mqtt_control import ProcessManager
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 class MicrosecondFormatter(logging.Formatter):

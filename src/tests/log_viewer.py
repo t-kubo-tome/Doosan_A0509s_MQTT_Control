@@ -12,6 +12,10 @@ import pyqtgraph as pg
 from pyqtgraph import AxisItem
 import numpy as np  # 数値配列処理用
 
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
 class LogLoader:
     """
     ログファイルの読み込み・パースを担当するクラス。
