@@ -180,3 +180,64 @@ sudo python src/main.py
 ## トラブルシューティング
 
 - GUIから`ConnectRobot`ボタンを押しても、ロボット、ハンドに接続できない場合がある。GUIを閉じて、再度起動してから`ConnectRobot`ボタンを押すと接続できる場合がある。何度も接続できない場合は、まず、PC、ロボットコントローラ、ハンドのIPアドレス、LANケーブルの接続を確認して再度接続を試みる。次に、ロボットコントローラまたはハンドを再起動して再度接続を試みる
+
+## 別ロボットに拡張する場合
+
+本ソースコード（`src/`下）は、MetaworkMQTTプロトコルでの、ロボット実機側の制御プログラムであり、別ロボットに拡張がしやすいように実装されている。ディレクトリ構造は、基本的に、エントリーポイントである`main.py`、ロボット共通の実装である`common/`、ロボット固有の実装である`robot/`、ロボットベンダーが提供するソースコードやバイナリを格納する`vendor`に分かれている。Doosan A0509sにおける各ソースコードの役割は以下の通りである。
+
+```txt
+src/
+├── main.py  # エントリーポイント。gui.pyまたはheadless.pyを起動
+├── requirements.txt  # 必要なPythonライブラリ
+# ロボット共通。ロボットによって変更不要
+├── common/
+│   ├── __init__.py
+# メインプロセス
+│   ├── gui.py  # GUIモード (ボタンでコマンド選択)
+│   ├── headless.py  # ヘッドレスモード (MQTTでコマンド受信)
+│   ├── process_manager.py  # GUI/ヘッドレスの背後で複数プロセスを管理する
+# サブプロセス
+│   ├── control_process.py  # ロボット制御のプロセス
+│   ├── monitor_process.py  # ロボットモニタリングのプロセス
+│   ├── control_archiver.py  # ロボット制御値の保存プロセス
+│   ├── monitor_gui.py  # ロボット状態値のGUI表示プロセス
+# インターフェース
+│   ├── control_hardware_interface.py  # ロボット制御のインターフェース
+│   ├── hand_control_hardware_interface.py  # ハンド制御のインターフェース
+│   ├── monitor_hardware_interface.py  # ロボットモニタリングのインターフェース
+│   ├── mqtt_recv_base.py  # MQTTでの目標値受信プロセスのインターフェース
+│   ├── shared_memory_base.py  # 共有メモリのインターフェース
+# 汎用モジュール
+│   ├── filter.py  # 平滑化
+│   ├── interpolate.py  # 線形補間
+│   ├── ipc.py  # プロセス間通信
+│   ├── log.py  # ログ用
+│   └── utils.py  # その他
+# ロボット固有。ロボットによって変更必要
+├── robot/
+│   ├── __init__.py  # ロボット固有の名前のインターフェースの実装を、ロボット共通のプロセスから呼び出すために必要
+│   ├── config.py  # ロボットごとのパラメータ
+│   ├── tools.py  # ロボットアームに付けるハンド一覧
+# インターフェースの実装
+│   ├── doosan_control_hardware.py  # ロボット制御のインターフェースの実装
+│   ├── qbsofthand_industry_control_hardware.py  # ハンド制御のインターフェースの実装
+│   ├── doosan_monitor_hardware.py  # ロボットモニタリングのインターフェースの実装
+│   ├── doosan_mqtt_recv.py  # MQTTでの目標値受信プロセスのインターフェースの実装
+│   ├── shared_memory.py  # 共有メモリのインターフェースの実装
+# ロボットの自作ドライバー。ロボットベンダーのAPIとインターフェースの仲介
+│   ├── CMakeLists.txt
+│   ├── doosan_robot.cpp  # アームの自作ドライバーのソース (Pybind11使用)
+│   ├── doosan_robot.hpp  # アームの自作ドライバーのヘッダー
+│   ├── doosan_robot_ext.py  # アームの自作ドライバーの拡張
+│   └── qbsofthand_industry_api_pybind.cpp  # ハンドの自作ドライバー (Pybind11使用)
+# ロボットベンダーが提供するソースコードやバイナリ。ロボットによって異なる
+└── vendor/
+    ├── API-DRFL/  # アームのベンダーライブラリ
+    └── qbsofthand_industry_api_1.0.3/  # ハンドのベンダーライブラリ
+```
+
+実装手順は次の通り。
+
+1. `common/`のインターフェースを、そのソースコード中の指示に従い、`robot/`に実装する。具体的には、必要に応じてロボットベンダーが提供するソースコードやバイナリを`vendor/`に格納し、必要に応じてロボットベンダーのAPIとインターフェースの仲介となる自作ドライバーを`robot/`に作成し、それらを用いてインターフェースを実装する。
+2. `robot/`の`config.py`、`tools.py`に、ロボットごとのパラメータやロボットアームに付けるハンド一覧を定義する。
+3. `robot/`の`__init__.py`に、1で実装した、ロボット固有の名前のインターフェースの実装を、ロボット共通のプロセスから呼び出せるように共通の名前でインポートできるようにする。`__init__.py`の`__all__`参照。
