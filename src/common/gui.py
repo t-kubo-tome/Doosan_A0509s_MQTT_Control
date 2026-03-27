@@ -810,7 +810,8 @@ class MQTTWin:
         self.logger.info("Change log file")
         # サブプロセスの制御値、状態値のファイルの保存先の変更完了を待つ
         while True:
-            if self.pm.ar[34] == 0 and self.pm.ar[35] == 0:
+            if (self.pm.shm.change_log_file_monitor == 0 and 
+                self.pm.shm.change_log_file_control_archiver == 0):
                 break
             time.sleep(0.1)
         self.setup_logging(
@@ -893,7 +894,7 @@ class MQTTWin:
             self.canvas_error.itemconfig(self.light_error, fill=color)
             joints = log.get("joints")
             if joints is not None:
-                joints = self.vr_to_real_joint(joints)
+                joints = self._angle_unit_converter.to_internal_list(joints)
                 for i in range(6):
                     self.string_var_states[f"J{i + 1}"].set(f"{joints[i]:.2f}")
             else:

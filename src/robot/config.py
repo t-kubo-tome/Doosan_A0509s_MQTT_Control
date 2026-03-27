@@ -3,8 +3,6 @@
 ## ロボットごとのパラメータ
 # ロボットのベンダー名
 robot_vendor = "Doosan Robotics"
-# ロボットモデル
-robot_model = "A0509s"
 # GUIに表示されるロボット略称
 robot_name = "Doosan"
 # API/GUIによる指令がサポートされるコマンド
@@ -107,8 +105,8 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-robot_uuid = os.getenv("ROBOT_UUID", "ur-real")
-robot_model_env = os.getenv("ROBOT_MODEL", "doosan-remote-vr")
+robot_uuid = os.getenv("ROBOT_UUID", "doosan-remote-vr")
+robot_model = os.getenv("ROBOT_MODEL", "doosan-remote-vr")
 mqtt_server = os.getenv("MQTT_SERVER", "sora2.uclab.jp")
 robot_ip = os.getenv("ROBOT_IP", "192.168.6.43")
 hand_ip = os.getenv("HAND_IP", "192.168.5.44")

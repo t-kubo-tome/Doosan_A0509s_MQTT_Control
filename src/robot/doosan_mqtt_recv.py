@@ -12,12 +12,12 @@ class Doosan_MQTT_Recv(MQTT_Recv_Base):
         """
         MQTT制御トピックの内容を解釈して共有メモリに反映。
         この実装内で、js中の関節角度(例: joints)が存在する場合、
-        必ずself._angle_unit_converter.to_internal(joints)
+        必ずself._angle_unit_converter.to_internal_list(joints)
         で角度を内部単位に変換したうえで共有メモリに反映すること。
         """
         if "joints" in js:
-            self.shm.joint_target = self._angle_unit_converter.to_internal(
-                js["joints"])
+            self.shm.joint_target = \
+                self._angle_unit_converter.to_internal_list(js["joints"])
 
         if "grip" in js:
             right_grip = js['grip'][1]

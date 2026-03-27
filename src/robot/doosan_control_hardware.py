@@ -23,6 +23,7 @@ class DoosanControlHardware(ControlHardwareInterface):
             # ログ収集周期は制御より優先度を下げる (周期を長くとる)
             log_t_intv=config.t_intv * 2,
         )
+        self.all_robot_state = {}
 
     def on_del(self) -> None:
         """追加の終了処理。"""
@@ -106,7 +107,7 @@ class DoosanControlHardware(ControlHardwareInterface):
     def get_is_in_servo_mode(self) -> bool:
         """ロボットがサーボモードかどうかを取得する。"""
         # Doosanではスレーブモードの状態はAPIでは不明なので制御値を使用
-        return bool(self.shm.maybe_slave_mode)
+        return bool(self.process.shm.maybe_slave_mode)
 
     def get_is_emergency_stopped(self) -> bool:
         """ロボットが非常停止状態かどうかを取得する。"""

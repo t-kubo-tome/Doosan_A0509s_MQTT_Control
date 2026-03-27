@@ -12,7 +12,7 @@ import psutil
 
 from common.filter import SMAFilter
 from common.interpolate import DelayedInterpolator
-from common.utils import StopWatch
+from common.utils import AngleUnitConverter, StopWatch
 from robot import config, ControlHardware
 from robot.shared_memory import NamedSharedMemory
 from robot.tools import tool_classes, tool_infos
@@ -28,6 +28,8 @@ class ControlProcess:
         # ControlHardwareを__init__内で初期化できないため、
         # このような実装にしている
         self.hw: ControlHardware | None = None
+        self._angle_unit_converter = AngleUnitConverter(
+            config.joint_unit_internal, config.joint_unit_external)
 
     def format_error(self, e: Exception) -> str:
         """例外をフォーマットする。"""
@@ -61,8 +63,6 @@ class ControlProcess:
                 self.hw = ControlHardware(self)
             if not self.hw.start():
                 raise ValueError("Failed to start robot")
-            # NOTE: all_robot_stateはDoosanRobotExtの中に組み込めるかも
-            self.all_robot_state = {}
             # ロボットによっては別のモニタプロセスで状態値を取得できないので
             # 制御プロセス中の別のスレッドで取得する
             if config.real_monitor_process == "control":
@@ -109,6 +109,7 @@ class ControlProcess:
         try:
             if not self.hw.set_area_enabled(enable):
                 raise ValueError("Failed to set area enabled")
+            return True
         except Exception as e:
             self.logger.error("Error setting area enabled")
             self.logger.error(f"{self.format_error(e)}")
@@ -118,7 +119,7 @@ class ControlProcess:
         """ロボットをデフォルトの姿勢に移動させる。例外の送出は禁止。"""
         self.logger.info("Tidy pose")
         try:
-            if not self.hw.move_joint(*config.tidy_joint):
+            if not self.hw.move_joint(config.tidy_joint):
                 raise ValueError("Failed to move to tidy pose")
             return True
         except Exception as e:
@@ -130,7 +131,7 @@ class ControlProcess:
         """ロボットを関節空間で移動させる。例外の送出は禁止。"""
         self.logger.info("Move joint")
         try:
-            ret = self.hw.move_joint(*joints)
+            ret = self.hw.move_joint(joints)
             if not ret:
                 raise ValueError("Failed to move to joint pose")
             return True
@@ -161,7 +162,7 @@ class ControlProcess:
             joints = np.asarray(joints)
             joints[joint] += direction
             joints = joints.tolist()
-            is_success = self.hw.move_joint(*joints)
+            is_success = self.hw.move_joint(joints)
             if not is_success:
                 raise ValueError("move_joint failed")
             return True
@@ -180,7 +181,7 @@ class ControlProcess:
             poses = np.asarray(poses)
             poses[axis] += direction
             poses = poses.tolist()
-            is_success = self.hw.move_pose(*poses)
+            is_success = self.hw.move_pose(poses)
             if not is_success:
                 raise ValueError("move_pose failed")
             return True
@@ -255,7 +256,7 @@ class ControlProcess:
         self.hw.on_step_start_in_control_loop()
 
     def should_wait_control_loop(self) -> bool:
-        self.hw.should_wait_control_loop()
+        return self.hw.should_wait_control_loop()
 
     def is_ready_to_stop(self) -> bool:
         # スレーブモードでは十分低速時に2回同じ位置のコマンドを送ると
@@ -274,7 +275,7 @@ class ControlProcess:
     ) -> bool:
         """関節のスレーブモードでの制御値をロボットに送る。例外の送出は禁止。"""
         try:
-            if not self.hw.move_joint_servo(*control):
+            if not self.hw.move_joint_servo(control):
                 raise ValueError("Failed to send servoJ command")
             return True
         except Exception as e:
@@ -296,7 +297,7 @@ class ControlProcess:
     ) -> bool:
         """関節のスレーブモードでの速度制御値をロボットに送る。例外の送出は禁止。"""
         try:
-            if not self.hw.move_joint_servo_by_vel(*control):
+            if not self.hw.move_joint_servo_by_vel(control):
                 raise ValueError("Failed to send servoJ command")
             return True
         except Exception as e:
@@ -322,7 +323,7 @@ class ControlProcess:
         return self.hw.get_current_force_rt()
 
     def get_all_robot_state_at_once(self) -> None:
-        return self.hw.get_all_robot_state_at_once()
+        self.hw.get_all_robot_state_at_once()
 
     def get_enabled(self) -> bool:
         return self.hw.get_enabled()
@@ -406,7 +407,8 @@ class ControlProcess:
             if actual_joint is not None:
                 self.shm.joint_state = actual_joint
                 self.shm.is_joint_state_received = 1
-                actual_joint_js["joints"] = self.real_to_vr_joint(actual_joint)
+                actual_joint_js["joints"] = \
+                    self._angle_unit_converter.to_external_list(actual_joint)
 
             if actual_tcp_pose is not None:
                 self.shm.pose_state = actual_tcp_pose
@@ -1009,7 +1011,6 @@ class ControlProcess:
                 else:
                     target_delayed = target
 
-
                 self.last_target_delayed = target_delayed
                 self.last_target_delayed_velocity = np.zeros(config.n_joints)
 
@@ -1515,6 +1516,8 @@ class ControlProcess:
     def receive_command_loop(self) -> None:
         """コマンドはサブスレッドで受付、簡単のためMQTTリアルタイム制御以外もサブスレッドで行う"""
         while True:
+            if self.shm.exit_program == 1:
+                break
             if self.control_pipe.poll(timeout=1):
                 command_dict = self.control_pipe.recv()
                 status = False
@@ -1602,12 +1605,13 @@ class ControlProcess:
                     break
                 # 監視間隔はリアルタイムでなくて良い
                 time.sleep(0.1)
-        self.del_robot()
-        self.logger.info("Robot disconnected")
         if config.real_monitor_process == "control":
             self.del_monitor_loop()
         self.del_receive_command_loop()
         self.logger.info("Clean up threads")
+        # del_robotはdel_*_loopの後に呼ぶ
+        self.del_robot()
+        self.logger.info("Robot disconnected")
         # 他のプロセスにも周知
         self.shm.exit_program = 1
         time.sleep(1)

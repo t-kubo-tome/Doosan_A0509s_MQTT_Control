@@ -284,7 +284,7 @@ bool Robot::start() {
     return false;
   }
   // TPの初期化が完了するのを待つ
-  int timeout_tp = 5000;  // milliseconds
+  int timeout_tp = 10000;  // milliseconds
   while (!g_TpInitailizingComplted) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     timeout_tp -= 100;
@@ -298,12 +298,12 @@ bool Robot::start() {
     push_log("[start] ManageAccessControl failed");
     return false;
   }
-  int timeout_authority = 5000;  // milliseconds
+  int timeout_authority = 10000;  // milliseconds
   while (!g_bHasControlAuthority) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     timeout_authority -= 100;
     if (timeout_authority <= 0) {
-      push_log("[start] timeout of 5s while waiting for control authority");
+      push_log("[start] timeout of 10s while waiting for control authority");
       return false;
     }
   }
@@ -357,12 +357,12 @@ bool Robot::enable() {
     return false;
   }
   // 制御を受け付ける状態になるまで待つ
-  int timeout_state = 5000;  // milliseconds
+  int timeout_state = 10000;  // milliseconds
   while (Drfl.get_robot_state() != STATE_STANDBY) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     timeout_state -= 100;
     if (timeout_state <= 0) {
-      push_log("[enable] timeout of 5s while waiting for control state");
+      push_log("[enable] timeout of 10s while waiting for control state");
       return false;
     }
   }

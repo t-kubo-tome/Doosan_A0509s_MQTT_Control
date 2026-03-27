@@ -64,8 +64,6 @@ class MonitorProcess:
                 self.hw = MonitorHardware(self)
             if not self.hw.start():
                 raise ValueError("Failed to start robot")
-            # NOTE: all_robot_stateはDoosanRobotExtの中に組み込めるかも
-            self.all_robot_state = {}
             # ロボットによっては別のモニタプロセスで状態値を取得できないので
             # 制御プロセス中の別のスレッドで取得する
             if config.real_monitor_process == "monitor":
@@ -175,7 +173,8 @@ class MonitorProcess:
             if actual_joint is not None:
                 self.shm.joint_state = actual_joint
                 self.shm.is_joint_state_received = 1
-                actual_joint_js["joints"] = self.real_to_vr_joint(actual_joint)
+                actual_joint_js["joints"] = \
+                    self._angle_unit_converter.to_external_list(actual_joint)
 
             if actual_tcp_pose is not None:
                 self.shm.pose_state = actual_tcp_pose
@@ -323,8 +322,10 @@ class MonitorProcess:
             if now - last > 0.3 or "tool_change" in actual_joint_js or "put_down_box" in actual_joint_js:
                 if self.client is not None:
                     jss = json.dumps(actual_joint_js)
-                    self.client.publish(config.mqtt_robot_state_topic, jss)
-                    actual_joint_js["topic"] = config.mqtt_robot_state_topic
+                    self.client.publish(
+                        config.mqtt_robot_state_topic + "/" + config.robot_uuid, jss)
+                    actual_joint_js["topic"] = \
+                        config.mqtt_robot_state_topic + "/" + config.robot_uuid
                 self.topic_memory.write("robot", actual_joint_js)
                 last = now
 
@@ -333,7 +334,7 @@ class MonitorProcess:
             if f is not None and self.shm.is_mqtt_control == 1:
                 joints = actual_joint_js.get("joints")
                 if joints is not None:
-                    joints = self._angle_unit_converter.to_external_list(joints)
+                    joints = self._angle_unit_converter.to_internal_list(joints)
                 datum = dict(
                     time=now,
                     kind="state",

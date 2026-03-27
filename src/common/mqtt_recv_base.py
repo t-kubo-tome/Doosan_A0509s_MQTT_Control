@@ -8,6 +8,7 @@ from datetime import datetime
 
 from paho.mqtt import client as mqtt
 
+from common.utils import AngleUnitConverter
 from robot import config
 from robot.shared_memory import NamedSharedMemory
 
@@ -24,7 +25,7 @@ class MQTT_Recv_Base(ABC):
         """
         MQTT制御トピックの内容を解釈して共有メモリに反映。
         この実装内で、js中の関節角度(例: joints)が存在する場合、
-        必ずself._angle_unit_converter.to_internal(joints)
+        必ずself._angle_unit_converter.to_internal_list(joints)
         で角度を内部単位に変換したうえで共有メモリに反映すること。
         """
         pass
@@ -34,6 +35,9 @@ class MQTT_Recv_Base(ABC):
         self.mqtt_ctrl_topic = None
         self.last_registered = None
         self.command_queue = None
+        self._angle_unit_converter = AngleUnitConverter(
+            config.joint_unit_internal, config.joint_unit_external
+        )
 
     def on_connect(self, client, userdata, connect_flags, reason_code, properties) -> None:
         self.logger.info("MQTT connected with result code: " + str(reason_code))
