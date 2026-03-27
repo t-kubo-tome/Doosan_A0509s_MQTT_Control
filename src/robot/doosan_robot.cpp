@@ -166,17 +166,19 @@ void OnMonitroingAccessControlCB(const MONITORING_ACCESS_CONTROL eTrasnsitContro
     // 制御権の移行をリクエストされたら (おそらくTPなどから)
     case MONITORING_ACCESS_CONTROL_REQUEST:
       push_log("[OnMonitroingAccessControlCB] MONITORING_ACCESS_CONTROL_REQUEST");
-      // サンプルコードでは拒否していたが、ここではTPを尊重して許可することにしている
-      // assert(Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_RESPONSE_NO));
+      // NOTE: 上記のログが出ないものの、以下のManageAccessControlがないと
+      // Disabledになることがある
+      assert(Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_RESPONSE_NO));
       break;
     // 制御権を失ったら (おそらく本プログラムが)
     case MONITORING_ACCESS_CONTROL_LOSS:
       push_log("[OnMonitroingAccessControlCB] MONITORING_ACCESS_CONTROL_LOSS");
       g_bHasControlAuthority = FALSE;
-      // サンプルコードでは自動復帰していたが、ここではTPを尊重して何もしないことにしている
-      // if (g_TpInitailizingComplted) {
-      //   Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_FORCE_REQUEST);
-      // }
+      // NOTE: 上記のログは出ないものの、ManageAccessControlがないと
+      // Disabledになることがある
+      if (g_TpInitailizingComplted) {
+        Drfl.ManageAccessControl(MANAGE_ACCESS_CONTROL_FORCE_REQUEST);
+      }
       break;
     // 制御権を取得したことを確認したら
     case MONITORING_ACCESS_CONTROL_GRANT:
